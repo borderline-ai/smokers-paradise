@@ -1170,6 +1170,43 @@ nav button.on svg{transform:translateY(-2px) scale(1.06)}
   stroke-linecap:round;stroke-linejoin:round}
 .rw-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;
   text-transform:uppercase;color:var(--faint)}
+.srw{display:grid;gap:12px}
+.srw-do,.srw-set{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.srw-lead{font-size:12.5px;color:var(--body);line-height:1.5;margin:4px 0 10px}
+.srw-row{display:flex;gap:8px}
+.srw-row input{flex:1;font:inherit;font-family:var(--mono);font-size:19px;letter-spacing:.10em;
+  text-transform:uppercase;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.28);
+  color:var(--ink);border:1px solid var(--line);outline:none}
+.srw-row input:focus{border-color:var(--brand)}
+.srw-row .btn{flex:none;width:auto;padding:10px 16px;font-size:13px}
+.srw-hit{margin-top:12px;padding:12px;border-radius:14px;border:1px solid rgba(255,47,168,.3);
+  background:rgba(255,47,168,.06)}
+.srw-hit .t b{display:block;font-size:15px}
+.srw-hit .t small{color:var(--muted);font-size:11.5px}
+.srw-ready{margin-top:8px;font-size:12px;font-weight:700;color:var(--reward-ink,#FFC22B)}
+.srw-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.srw-acts .btn{width:auto;flex:1 1 auto;padding:10px 14px;font-size:13px}
+.srw-two{display:grid;grid-template-columns:1fr 1.3fr;gap:10px}
+.mb-hero{text-align:center}
+.mb-badge{margin:0 auto 8px;width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+  background:linear-gradient(140deg,var(--go),#8A1E5E);color:#fff}
+.mb-badge svg{width:22px;height:22px;fill:currentColor}
+.mb-bday{display:grid;grid-template-columns:1.6fr 1fr;gap:10px}
+.mb-bday select{width:100%;font:inherit;padding:11px 12px;border-radius:12px;
+  background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.mb-agree{display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;font-size:12.5px;
+  line-height:1.45;color:var(--body)}
+.mb-agree input{margin-top:2px;width:18px;height:18px;flex:none;accent-color:var(--go)}
+.mb-card{text-align:center;background:linear-gradient(150deg,#2A0F33,#12060F);
+  border-color:rgba(255,47,168,.34)}
+.mb-name{font-family:var(--disp);font-weight:800;font-size:22px;letter-spacing:-.03em;
+  color:var(--ink);margin-top:2px}
+.mb-code{font-family:var(--mono);font-size:30px;letter-spacing:.10em;color:#FF7BC8;margin-top:8px}
+.mb-hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+.mb-ready{border-color:rgba(255,194,43,.4)}
+.mb-dots{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 8px}
+.mb-dots i{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--line);display:block}
+.mb-dots i.on{background:var(--go);border-color:var(--go)}
 .rw-bal{text-align:center;padding:20px 14px}
 .rw-bal.demo{border-style:dashed;border-color:var(--hairD)}
 .rw-points{margin-top:8px;display:flex;align-items:baseline;justify-content:center;gap:8px}
@@ -13659,6 +13696,13 @@ function renderAccount(){
     </div>
     <button class="arow" data-edit="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.7"/><path d="M4.6 21c1-4.1 4-6.2 7.4-6.2s6.4 2.1 7.4 6.2"/></svg>
       <div class="t"><b>Name and phone</b><small>Used for pickup and your ready text</small></div><span class="ch">&rsaquo;</span></button>
+    ${(typeof SHOP_REWARDS!=='undefined' && SHOP_REWARDS.on
+        && !(typeof Loyalty!=='undefined' && Loyalty.available && Loyalty.state.provider!=='none'))?`
+    <button class="arow" data-go="rewards"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>
+      <div class="t"><b>${esc(SHOP_REWARDS.name)}</b><small>${Member.joined
+        ? esc(Member.data.code) + ' &middot; ' + Member.progress().visits + ' of ' + SHOP_REWARDS.visitsFor + ' visits'
+        : 'Every ' + SHOP_REWARDS.visitsFor + ' visits is ' + esc(SHOP_REWARDS.reward)}</small></div>
+      <span class="ch">&rsaquo;</span></button>`:''}
     ${(typeof Loyalty!=='undefined' && Loyalty.available && Loyalty.state.provider!=='none')?`
     <button class="arow" data-go="rewards"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>
       <div class="t"><b>Rewards</b><small>${Loyalty.linked
@@ -14798,7 +14842,7 @@ function ticketList(){
 function renderStaff(){
   const TK=ticketList();
   const rev=TK.reduce((a,o)=>a+(o.total||0),0), n=TK.length;
-  const tabs=[['orders','Orders'],['menu','Menu'],['media','Media check'],['cust','Customers'],['feeds','Connected'],['calls','AI phone'],['blast','Text blast'],['stock','Low stock']];
+  const tabs=[['orders','Orders'],['menu','Menu'],['rw','Rewards'],['media','Media check'],['cust','Customers'],['feeds','Connected'],['calls','AI phone'],['blast','Text blast'],['stock','Low stock']];
   let body='';
   if(STAB==='orders'){
     body=(TK.length?TK.map(o=>`<div class="ticket ${o.fresh?'new':''}${o.status==='ready'?' rdy':''}${o.arrive==='here'?' here':''}">
@@ -14864,10 +14908,22 @@ function renderStaff(){
         National brands like Geek Bar, Lost Mary, Puffco, RAW and Zyn ship an image pack to whoever stocks them, which is why every vape site online shows the same photos. Your distributor rep hands that over once and it covers most of the shelf.
         Unique glass and anything the shop wants to look premium gets shot properly.
         Anything with no picture yet still renders as clean art instead of an empty box, so the menu never looks broken.</div>`;
+  } else if(STAB==='rw'){
+    body=staffRewards();
   } else if(STAB==='cust'){
-    body=`<div class="stlist">${CUSTOMERS.map(c=>`<div class="strow"><div class="av">${c[0].split(' ').map(x=>x[0]).join('')}</div>
+    /* A REAL MEMBER GOES FIRST AND IS MARKED AS REAL. The list below it is
+       the sample the walkthrough has always carried, and it still says so. */
+    const me = (typeof Member !== 'undefined' && Member.joined) ? Member.data : null;
+    const mp = me ? Member.progress() : null;
+    body=`${me?`<div class="stlist"><div class="strow">
+        <div class="av" style="color:var(--go-ink)">${esc((me.first||'M')[0].toUpperCase())}</div>
+        <div class="t"><b>${esc(me.first||'Member')}</b><small>${esc(me.code)}
+          &middot; ${esc(String(me.phone||'').replace(/^(\d{3})(\d{3})(\d{4})$/,'$1 ***$3').slice(0,11))}
+          &middot; ${mp.total} visit${mp.total===1?'':'s'}</small></div>
+        <span class="n" style="color:var(--go-ink);font-size:10px">Joined here</span></div></div>`:''}
+      <div class="stlist">${CUSTOMERS.map(c=>`<div class="strow"><div class="av">${c[0].split(' ').map(x=>x[0]).join('')}</div>
       <div class="t"><b>${c[0]}</b><small>${c[1]} &middot; ${c[2]}</small></div><span class="n">${c[3].toLocaleString()} pts</span></div>`).join('')}</div>
-      <div class="stnote">Everyone who scanned the QR to claim a discount is in here with a phone number the shop owns. Right now those numbers go in a notebook and never get used again.</div>`;
+      <div class="stnote">${me?'The member at the top joined through the app on this device. The list under it is sample data for the walkthrough. ':''}Everyone who scanned the QR to claim a discount is in here with a phone number the shop owns. Right now those numbers go in a notebook and never get used again.</div>`;
   } else if(STAB==='feeds'){
     const F=[
       ['Register QR','Live','Same code on the same sign. Now it opens the app and an account claims the discount.'],
@@ -14919,6 +14975,7 @@ function renderStaff(){
 
   $$('#staffBody [data-stab]').forEach(b=>b.onclick=()=>{STAB=b.dataset.stab;renderStaff()});
   if(STAB==='media') wireMediaCheck();
+  if(STAB==='rw') wireStaffRewards();
   const mq=$('#menuQ');
   if(mq)mq.oninput=()=>{MENUQ=mq.value;const pos=mq.selectionStart;renderStaff();
     const n=$('#menuQ'); if(n){n.focus();n.setSelectionRange(pos,pos)}};
@@ -14953,6 +15010,134 @@ function renderStaff(){
    Pick a folder of images, it guesses which product each one belongs to
    from the filename, you correct anything it got wrong, save the lot.     */
 let PENDING=[];
+/* ======================================================================
+   THE COUNTER SCREEN FOR THE REWARDS PROGRAMME
+   Two things live here and they are deliberately not mixed: the action the
+   counter takes fifty times a day, and the rule the owner sets once.
+   ====================================================================== */
+let SRW = {code:'', msg:'', found:null};
+
+function staffRewards(){
+  const R = SHOP_REWARDS;
+  if(!R.on){
+    return `<div class="stempty"><b>The rewards programme is switched off</b>
+      <p>Customers see the honest "rewards live at the counter" screen instead.</p></div>
+      ${srwSetup()}`;
+  }
+  const m = SRW.found;
+  const p = m ? Member.progress() : null;
+  return `
+    <div class="srw">
+      <div class="srw-do">
+        <div class="eyebrow">Add a visit</div>
+        <p class="srw-lead">Type the code on the customer's screen, then add the
+          visit when you take their money.</p>
+        <div class="srw-row">
+          <input id="srwCode" value="${esc(SRW.code)}" placeholder="SP00000"
+            autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="7">
+          <button class="btn" id="srwFind">Look up</button>
+        </div>
+        ${SRW.msg ? `<div class="ckwarn" role="alert">${esc(SRW.msg)}</div>` : ''}
+        ${m ? `<div class="srw-hit">
+          <div class="t"><b>${esc(m.first || 'Member')}</b>
+            <small>${esc(m.code)} &middot; ${p.visits} of ${p.need} visits
+              &middot; ${p.total} all time</small></div>
+          ${p.ready ? `<div class="srw-ready">${p.ready > 1 ? p.ready + ' rewards' : 'A reward'}
+            ready &middot; ${esc(R.reward)}</div>` : ''}
+          <div class="srw-acts">
+            <button class="btn" id="srwAdd">Add a visit</button>
+            ${p.ready ? `<button class="btn ghost" id="srwUse">Reward used, take it off</button>` : ''}
+          </div></div>` : ''}
+        <div class="stnote" style="margin-left:0;margin-right:0">This walkthrough
+          file has no server, so the only member it can find is the one who
+          joined on this device. With the shop's list connected below, every
+          member's code works from any counter.</div>
+      </div>
+      ${srwSetup()}
+    </div>`;
+}
+
+function srwSetup(){
+  const R = SHOP_REWARDS;
+  return `
+    <div class="srw-set">
+      <div class="eyebrow">The rule</div>
+      <p class="srw-lead">Change any of this and the customer's screen changes
+        with it. Nothing here is fixed.</p>
+      <label class="ckfield"><span>Programme name</span>
+        <input id="srwName" value="${esc(R.name)}"></label>
+      <div class="srw-two">
+        <label class="ckfield"><span>Visits to earn a reward</span>
+          <input id="srwN" value="${R.visitsFor}" inputmode="numeric" maxlength="3"></label>
+        <label class="ckfield"><span>What they get</span>
+          <input id="srwGift" value="${esc(R.reward)}"></label>
+      </div>
+      <label class="ckfield"><span>Birthday line</span>
+        <input id="srwPerk" value="${esc(R.perk)}"></label>
+      <label class="ckfield"><span>Where new members are sent</span>
+        <input id="srwEnd" value="${esc(R.endpoint)}" placeholder="Paste the CRM webhook URL"
+          autocomplete="off" spellcheck="false" inputmode="url"></label>
+      <p class="ckfine">Empty means a join stays on the customer's phone and
+        nothing leaves this device. Paste the shop's webhook and every join
+        arrives as a contact with their name, number and birthday.</p>
+      <div class="srw-acts">
+        <button class="btn" id="srwSave">Save the rule</button>
+        <button class="btn ghost" id="srwOff">${R.on ? 'Switch the programme off' : 'Switch the programme on'}</button>
+      </div>
+    </div>`;
+}
+
+function wireStaffRewards(){
+  const g = id => document.getElementById(id);
+  const find = () => {
+    const c = (g('srwCode') || {}).value || '';
+    SRW.code = c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    SRW.found = null;
+    if(SRW.code.length < 3){ SRW.msg = 'Type the code from the customer\'s card.'; }
+    else if(Member.joined && Member.data.code === SRW.code){ SRW.msg = ''; SRW.found = Member.data; }
+    else { SRW.msg = 'No member with that code on this device.'; }
+    renderStaff();
+  };
+  const f = g('srwFind'); if(f) f.onclick = find;
+  const inp = g('srwCode');
+  if(inp) inp.onkeydown = e => { if(e.key === 'Enter') find() };
+  const a = g('srwAdd');
+  if(a) a.onclick = () => {
+    Member.addVisit();
+    SRW.found = Member.data;
+    const p = Member.progress();
+    renderStaff();
+    toast(p.ready ? 'Visit added. A reward is ready.'
+                  : 'Visit added. ' + (p.need - p.visits) + ' to go.');
+  };
+  const u = g('srwUse');
+  if(u) u.onclick = () => {
+    Member.redeem();
+    SRW.found = Member.data;
+    renderStaff();
+    toast('Reward taken off. Ring the rest as normal.');
+  };
+  const sv = g('srwSave');
+  if(sv) sv.onclick = () => {
+    const n = parseInt((g('srwN') || {}).value, 10);
+    SHOP_REWARDS.name = ((g('srwName') || {}).value || '').trim() || SHOP_REWARDS.name;
+    if(n >= 1 && n <= 100) SHOP_REWARDS.visitsFor = n;
+    SHOP_REWARDS.reward = ((g('srwGift') || {}).value || '').trim() || SHOP_REWARDS.reward;
+    SHOP_REWARDS.perk = ((g('srwPerk') || {}).value || '').trim();
+    SHOP_REWARDS.endpoint = ((g('srwEnd') || {}).value || '').trim();
+    saveRewardsCfg();
+    renderStaff();
+    toast('Saved. The customer screen already says it.');
+  };
+  const off = g('srwOff');
+  if(off) off.onclick = () => {
+    SHOP_REWARDS.on = !SHOP_REWARDS.on;
+    saveRewardsCfg();
+    renderStaff();
+    toast(SHOP_REWARDS.on ? 'Programme switched on' : 'Programme switched off');
+  };
+}
+
 function normTok(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
 function guessProduct(filename){
   const toks=normTok(filename.replace(/\.[a-z0-9]+$/i,'')).split(' ').filter(t=>t.length>2);
@@ -17269,7 +17454,7 @@ function siteFoot(){
              is not the build I fixed it in". The build number is on screen now,
              in the fine print where a customer will never read it and where I
              can always ask for it. */''}
-      <span class="sf-build">Build 42 &middot; 19 Sep</span>
+      <span class="sf-build">Build 43 &middot; 19 Sep</span>
     </div>
   </div>`;
 }
@@ -18169,6 +18354,114 @@ function rwHistoryBlock(){
   </div>`;
 }
 
+/* JOIN. Four fields, and each one earns its place: see the note at the top of
+   scripts/s165_rewards.py for why there is no email and no year of birth. */
+const MB = {first: '', phone: '', bmon: '', bday: '', sms: true, msg: '', done: false};
+
+function mbJoin(){
+  const R = SHOP_REWARDS;
+  const months = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+  return `
+    <div class="rw-card mb-hero">
+      <div class="mb-badge"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></div>
+      <h3>${esc(R.name)}</h3>
+      <p>Every ${R.visitsFor} visits is ${esc(R.reward)}. ${esc(R.perk)}</p>
+      <p class="ckfine">Free to join. Nothing to carry, nothing to lose.</p>
+    </div>
+    <div class="rw-card">
+      <label class="ckfield"><span>First name</span>
+        <input id="mbFirst" value="${esc(MB.first)}" placeholder="Marco"
+          autocomplete="given-name" enterkeyhint="next"></label>
+      <label class="ckfield"><span>Mobile number</span>
+        <input id="mbPhone" value="${esc(MB.phone)}" placeholder="(520) 555-0134"
+          inputmode="tel" autocomplete="tel" enterkeyhint="next"></label>
+      <div class="mb-bday">
+        <label class="ckfield"><span>Birthday month</span>
+          <select id="mbMon"><option value="">Choose</option>${months.map((n, i) =>
+            `<option value="${i + 1}" ${MB.bmon == (i + 1) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="ckfield"><span>Day</span>
+          <input id="mbDay" value="${esc(MB.bday)}" placeholder="14" inputmode="numeric" maxlength="2"></label>
+      </div>
+      <p class="ckfine">Your birthday is month and day only. We never ask the year.</p>
+      <label class="mb-agree"><input type="checkbox" id="mbSms" ${MB.sms ? 'checked' : ''}>
+        <span>Text me when something I actually want lands, and on my birthday.
+          Reply STOP any time.</span></label>
+      ${MB.msg ? `<div class="ckwarn" role="alert">${esc(MB.msg)}</div>` : ''}
+      <button class="btn" id="mbGo">Join ${esc(R.name)}</button>
+      <p class="ckfine">${esc(R.terms)}</p>
+    </div>`;
+}
+
+/* THE CARD. What the customer holds up at the counter. */
+function mbCard(){
+  const R = SHOP_REWARDS, d = Member.data, p = Member.progress();
+  const dots = Array.from({length: p.need}).map((_, i) =>
+    `<i class="${i < p.visits ? 'on' : ''}"></i>`).join('');
+  return `
+    <div class="rw-card mb-card">
+      <div class="rw-eyebrow">${esc(R.name)}</div>
+      <div class="mb-name">${esc(d.first || 'Member')}</div>
+      <div class="mb-code">${esc(d.code)}</div>
+      <div class="mb-hint">Show this at the counter</div>
+    </div>
+
+    ${p.ready ? `<div class="rw-card mb-ready">
+      <h3>${p.ready > 1 ? p.ready + ' rewards ready' : 'A reward is ready'}</h3>
+      <p>${esc(R.reward)} on your next visit. Ask for it at the counter and they
+        will take it off at the register.</p>
+    </div>` : ''}
+
+    <div class="rw-card">
+      <h4>${p.visits} of ${p.need} visits</h4>
+      <div class="mb-dots">${dots}</div>
+      <p class="ckfine">${p.visits === 0 && !p.total
+        ? 'Your first visit gets added next time you pay at the counter.'
+        : (p.need - p.visits) + ' more and the next ' + esc(R.reward) + ' is yours.'}</p>
+      <p class="ckfine">Visits are added by the counter when you pay. This screen
+        only shows what they have added, so it can never be ahead of the shop.</p>
+    </div>
+
+    <div class="rw-card">
+      <h4>How it works</h4>
+      <p class="ckfine">Show your code when you pay. Every ${R.visitsFor} visits
+        earns ${esc(R.reward)}, and the register applies it. ${esc(R.perk)}</p>
+      <p class="ckfine">${esc(R.terms)}</p>
+      <button class="btn ghost" id="mbForget">Leave the programme</button>
+    </div>`;
+}
+
+function mbWire(){
+  const g = id => document.getElementById(id);
+  const read = () => {
+    MB.first = (g('mbFirst') || {}).value || '';
+    MB.phone = (g('mbPhone') || {}).value || '';
+    MB.bmon  = (g('mbMon')   || {}).value || '';
+    MB.bday  = (g('mbDay')   || {}).value || '';
+    MB.sms   = !!((g('mbSms') || {}).checked);
+  };
+  const go = g('mbGo');
+  if(go) go.onclick = () => {
+    read();
+    const digits = MB.phone.replace(/\D/g, '');
+    if(!MB.first.trim()){ MB.msg = 'We need a first name for the counter.'; renderRewards(); return }
+    if(digits.length !== 10){ MB.msg = 'That does not look like a 10 digit mobile number.'; renderRewards(); return }
+    if(!MB.sms){ MB.msg = 'Tick the box so we are allowed to text you. It is the whole point.'; renderRewards(); return }
+    const day = parseInt(MB.bday, 10);
+    const bday = (MB.bmon && day >= 1 && day <= 31) ? (MB.bmon + '-' + day) : '';
+    MB.msg = '';
+    Member.join(MB.first, digits, bday, MB.sms);
+    if(typeof toast === 'function') toast('You are in. Show your code at the counter.');
+    renderRewards();
+  };
+  const f = g('mbForget');
+  if(f) f.onclick = () => {
+    Member.forget();
+    MB.first = ''; MB.phone = ''; MB.bmon = ''; MB.bday = ''; MB.msg = '';
+    renderRewards();
+  };
+}
+
 function rwSignIn(){
   return `
     <div class="rw-card">
@@ -18204,6 +18497,149 @@ function rwVerify(){
 
 /* The state where nothing is connected at all. It is a real screen rather than
    an empty one, because "we cannot show you this yet" is information. */
+/* ======================================================================
+   THE SHOP'S OWN REWARDS PROGRAMME
+   Used only where no external loyalty provider answers, which is every shop
+   that has never run one. The shop owns every value in here; nothing about
+   the rule is hard-coded into the screens that draw it.
+   ====================================================================== */
+const SHOP_REWARDS = {
+  on: true,
+  name: 'Paradise Rewards',
+  /* the rule, in the shop's words and the shop's numbers */
+  visitsFor: 10,
+  reward: '$10 off',
+  perk: 'A birthday text with something on us, every year.',
+  /* Where a new member lands. Empty here: this file is the offline
+     walkthrough, so a join is kept on the phone and nothing leaves it. */
+  endpoint: '',
+  terms: 'One membership per phone number. Visits are added at the counter when you pay. 21+ only. The register is the final word on any discount.'
+};
+
+/* THE SHOP OWNS THE RULE. Whatever the counter last saved wins over the
+   defaults above, so nothing about this programme is a number I chose and
+   left in a file. */
+(function(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('sp_rewards_cfg_v1') || 'null');
+    if(saved) Object.assign(SHOP_REWARDS, saved);
+  }catch(e){}
+})();
+function saveRewardsCfg(){
+  try{
+    localStorage.setItem('sp_rewards_cfg_v1', JSON.stringify({
+      on: SHOP_REWARDS.on, name: SHOP_REWARDS.name, visitsFor: SHOP_REWARDS.visitsFor,
+      reward: SHOP_REWARDS.reward, perk: SHOP_REWARDS.perk, endpoint: SHOP_REWARDS.endpoint
+    }));
+  }catch(e){}
+}
+
+/* THE MEMBER ON THIS PHONE.
+   Visits are never written here by anything the customer can press — only the
+   counter adds one, from Staff view, against the code the customer shows. */
+const Member = (function(){
+  const KEY = 'sp_member_v1';
+  let m = null;
+  function load(){
+    if(m) return m;
+    try{ m = JSON.parse(localStorage.getItem(KEY) || 'null') }catch(e){ m = null }
+    return m;
+  }
+  function store(){
+    try{ localStorage.setItem(KEY, JSON.stringify(m)) }catch(e){}
+  }
+  /* A short code the counter can read off a screen across a counter and type
+     without asking twice. Derived from the number so it is stable, and it is
+     not the number: four digits of it would be a credential. */
+  function codeFor(phone){
+    const d = String(phone || '').replace(/\D/g, '');
+    let h = 7;
+    for(let i = 0; i < d.length; i++) h = (h * 31 + d.charCodeAt(i)) % 100000;
+    return 'SP' + String(h).padStart(5, '0');
+  }
+  function digits(p){ return String(p || '').replace(/\D/g, '') }
+  return {
+    get joined(){ return !!load() },
+    get data(){ return load() },
+    codeFor,
+    /* the queue is drained on every open, so a join made with no signal still
+       reaches the shop the next time the phone has one */
+    async flush(){
+      if(!SHOP_REWARDS.endpoint) return;
+      let q = [];
+      try{ q = JSON.parse(localStorage.getItem(KEY + '_q') || '[]') }catch(e){ q = [] }
+      if(!q.length) return;
+      const left = [];
+      for(const item of q){
+        try{
+          const r = await fetch(SHOP_REWARDS.endpoint, {
+            method: 'POST', headers: {'content-type': 'application/json'},
+            body: JSON.stringify(item)
+          });
+          if(!r.ok) left.push(item);
+        }catch(e){ left.push(item) }
+      }
+      try{ localStorage.setItem(KEY + '_q', JSON.stringify(left)) }catch(e){}
+    },
+    join(first, phone, bday, sms){
+      m = {
+        first: String(first || '').trim(),
+        phone: digits(phone),
+        bday: bday || '',
+        sms: !!sms,
+        code: codeFor(phone),
+        joined: new Date().toISOString(),
+        visits: [],
+        redeemed: []
+      };
+      store();
+      let q = [];
+      try{ q = JSON.parse(localStorage.getItem(KEY + '_q') || '[]') }catch(e){ q = [] }
+      q.push({first: m.first, phone: m.phone, birthday: m.bday, sms: m.sms,
+              code: m.code, joined: m.joined, shop: (typeof STORE !== 'undefined' ? STORE.name : '')});
+      try{ localStorage.setItem(KEY + '_q', JSON.stringify(q)) }catch(e){}
+      this.flush();
+      return m;
+    },
+    /* ONLY THE COUNTER CALLS THIS. */
+    addVisit(){
+      if(!load()) return null;
+      m.visits.push({at: new Date().toISOString()});
+      store();
+      return m;
+    },
+    /* And this. A reward coming off is a fact about the till, so it is
+       recorded the same way a visit is, and the card recomputes from it. */
+    redeem(){
+      if(!load()) return null;
+      m.redeemed = m.redeemed || [];
+      /* the price is stamped on the redemption, because the rule can change
+         tomorrow and this one was already paid for */
+      m.redeemed.push({at: new Date().toISOString(), reward: SHOP_REWARDS.reward,
+                       cost: SHOP_REWARDS.visitsFor});
+      store();
+      return m;
+    },
+    forget(){ m = null; try{ localStorage.removeItem(KEY) }catch(e){} },
+    /* how far through the card they are, counting only what the counter added */
+    progress(){
+      const d = load();
+      if(!d) return {visits: 0, need: SHOP_REWARDS.visitsFor, ready: 0};
+      /* spend what was actually spent. A redemption from before the price
+         was stamped has nothing to go on, so it takes today's rule. */
+      const used = (d.redeemed || []).reduce(
+        (a, r) => a + (r && r.cost ? r.cost : SHOP_REWARDS.visitsFor), 0);
+      const net = Math.max(0, (d.visits || []).length - used);
+      return {
+        visits: net % SHOP_REWARDS.visitsFor,
+        need: SHOP_REWARDS.visitsFor,
+        ready: Math.floor(net / SHOP_REWARDS.visitsFor),
+        total: (d.visits || []).length
+      };
+    }
+  };
+})();
+
 function rwDisconnected(){
   const L = Loyalty.state;
   return `<div class="rw-card">
@@ -18229,9 +18665,15 @@ function renderRewards(){
     return;
   }
 
-  /* No order service, or no programme configured: one honest screen. */
+  /* NO EXTERNAL PROVIDER. Two different answers, and the difference is
+     whether the shop runs a programme of its own. When it does, this app is
+     where people join it; when it does not, the honest screen stands. */
   if(!Loyalty.available || L.provider === 'none'){
-    $('#v-rewards').innerHTML = head + `<div class="ckwrap">${rwDisconnected()}</div>`;
+    const body = (typeof SHOP_REWARDS !== 'undefined' && SHOP_REWARDS.on)
+      ? (Member.joined ? mbCard() : mbJoin())
+      : rwDisconnected();
+    $('#v-rewards').innerHTML = head + `<div class="ckwrap">${body}</div>`;
+    if(typeof SHOP_REWARDS !== 'undefined' && SHOP_REWARDS.on) mbWire();
     return;
   }
 
