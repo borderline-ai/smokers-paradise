@@ -73,7 +73,8 @@ async def main():
         r = await pg.evaluate("""async () => {
             document.querySelector('#staff').classList.remove('on');
             go('rewards'); await new Promise(r=>setTimeout(r,600));
-            mbFirst.value='Marco'; mbPhone.value='5205550134'; mbMon.value='4'; mbDay.value='14';
+            mbFirst.value='Marco'; mbPhone.value='5205550134';
+            mbEmail.value='marco@example.com'; mbMon.value='4'; mbDay.value='14';
             mbGo.click(); await new Promise(r=>setTimeout(r,500));
             return {code: Member.data.code} }""")
         code = r['code']

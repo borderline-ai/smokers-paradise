@@ -163,6 +163,7 @@ async def main():
                 go('rewards'); await new Promise(r=>setTimeout(r,600));
                 document.getElementById('mbFirst').value = 'Ana';
                 document.getElementById('mbPhone').value = '(520) 555-0134';
+                document.getElementById('mbEmail').value = 'ana@example.com';
                 document.getElementById('mbMon').value = '3';
                 document.getElementById('mbDay').value = '14';
                 document.getElementById('mbSms').checked = true;
@@ -182,13 +183,26 @@ async def main():
             ictx, ipad = await device(834, 1112)
             await ipad.goto(base + '/counter')
             await ipad.wait_for_timeout(1600)
-            staffed = await ipad.evaluate("() => !!window.SP_STAFF")
-            check('the counter has its own address', staffed, staffed)
 
-            await ipad.evaluate("() => document.querySelector('#gateYes').click()")
-            await ipad.wait_for_timeout(1400)
-            up = await ipad.evaluate("() => document.querySelector('#pin').classList.contains('on')")
-            check('and it puts a PIN pad up', up, up)
+            # THE COUNTER IS A DIFFERENT APP. It used to be the customer app
+            # with a flag injected, which meant the register downloaded 1.9 MB
+            # of document and 309 photographs to show a lookup box and a ticket
+            # list. The weight is the whole reason for the split, so the weight
+            # is what is asserted.
+            r = await ipad.evaluate("""async () => {
+                const doc = await (await fetch('/counter', {cache:'no-store'})).blob();
+                return {bytes: doc.size,
+                        title: document.title,
+                        customerCode: typeof window.PRODUCTS !== 'undefined'
+                                   || typeof window.renderHome !== 'undefined'} }""")
+            check('the counter is its own app, not the customer one',
+                  'Register' in r['title'] and not r['customerCode'], r)
+            check('and it is small enough to open fifty times a day',
+                  r['bytes'] < 120 * 1024, '%.0f KB' % (r['bytes'] / 1024.0))
+
+            up = await ipad.evaluate(
+                "() => !document.getElementById('door').classList.contains('hide')")
+            check('it puts a PIN pad up and nothing else', up, up)
 
             # The PIN is checked by the server. A wrong one is refused there,
             # not here, which is the whole reason the door is safe to publish.
@@ -196,58 +210,53 @@ async def main():
                 await ipad.evaluate("k => document.querySelector('#keys [data-k=\"%s\"]').click()" % k, k)
             await ipad.wait_for_timeout(900)
             r = await ipad.evaluate("""() => ({
-                pin: document.querySelector('#pin').classList.contains('on'),
-                staff: document.querySelector('#staff').classList.contains('on')})""")
-            check('the wrong PIN does not open the counter', r['pin'] and not r['staff'], r)
+                door: !document.getElementById('door').classList.contains('hide'),
+                app: !document.getElementById('app').classList.contains('hide'),
+                msg: document.getElementById('doorMsg').textContent})""")
+            check('the wrong PIN does not open the counter',
+                  r['door'] and not r['app'] and len(r['msg']) > 4, r)
 
             for k in PIN:
                 await ipad.evaluate("k => document.querySelector('#keys [data-k=\"%s\"]').click()" % k, k)
             await ipad.wait_for_timeout(1000)
             r = await ipad.evaluate("""() => ({
-                staff: document.querySelector('#staff').classList.contains('on')})""")
+                staff: !document.getElementById('app').classList.contains('hide')})""")
             check('the right one does', r['staff'], r)
 
-            # The counter lives at /counter, one path segment deep, which is the
-            # case a root-relative path would have got right by luck and a
-            # relative one gets wrong without <base>. This is that check.
-            r = await ipad.evaluate("""async () => {
-                document.querySelectorAll('img[loading]').forEach(i=>i.loading='eager');
-                await new Promise(r=>setTimeout(r,2400));
-                const im = [...document.querySelectorAll('img')].filter(
-                  i => (i.getAttribute('src')||'').startsWith('img/')
-                       && i.getBoundingClientRect().width > 0);
-                return {n: im.length,
-                        broken: im.filter(i=>i.naturalWidth<=2).length,
-                        sample: im.length ? im[0].currentSrc : ''} }""")
-            check('photographs load on the counter address too, one path deep',
-                  r['n'] > 0 and r['broken'] == 0 and '/img/' in r['sample'], r)
+            # The counter ships no photographs at all now, which is the point.
+            # It fetches one only when somebody opens the Menu and a product
+            # has one.
+            r = await ipad.evaluate("""() => ({
+                imgs: document.querySelectorAll('img').length})""")
+            check('the counter loads no photographs to show a ticket list',
+                  r['imgs'] == 0, r)
 
             # ---- THE TEST THIS WHOLE BACKEND EXISTS FOR ---------------------
             r = await ipad.evaluate("""async (code) => {
-                STAB = 'rw'; renderStaff();
-                await new Promise(r=>setTimeout(r,400));
-                document.getElementById('srwCode').value = code;
-                document.getElementById('srwFind').click();
-                await new Promise(r=>setTimeout(r,900));
-                return {hit: !!document.querySelector('.srw-hit'),
-                        txt: (document.querySelector('#staffBody')||{}).innerText||'',
-                        warn: (document.querySelector('#staffBody .ckwarn')||{}).innerText||''} }""", code)
+                TAB = 'rewards'; drawTabs(); render();
+                await new Promise(r=>setTimeout(r,300));
+                document.getElementById('rwCode').value = code;
+                document.getElementById('rwFind').click();
+                await new Promise(r=>setTimeout(r,1100));
+                return {hit: !!document.querySelector('.hit'),
+                        txt: document.getElementById('view').innerText,
+                        warn: (document.querySelector('.warn')||{}).innerText||''} }""", code)
             check('the counter finds a member who joined on another device',
                   r['hit'] and 'Ana' in r['txt'], r['warn'] or r['txt'][:200])
             check('and no longer says the member is not on this device',
                   'on this device' not in r['txt'], r['txt'][:200])
 
             r = await ipad.evaluate("""async () => {
-                document.getElementById('srwAdd').click();
-                await new Promise(r=>setTimeout(r,900));
-                return {txt: (document.querySelector('.srw-hit')||{}).innerText||''} }""")
+                document.getElementById('rwAdd').click();
+                await new Promise(r=>setTimeout(r,1100));
+                return {txt: (document.querySelector('.hit')||{}).innerText||''} }""")
             check('the counter adds a visit', '1 of 10' in r['txt'], r)
 
             r = await ipad.evaluate("""async () => {
-                document.getElementById('srwAdd').click();
-                await new Promise(r=>setTimeout(r,900));
-                return {txt: (document.querySelector('.srw-hit')||{}).innerText||'',
-                        warn: (document.querySelector('#staffBody .ckwarn')||{}).innerText||''} }""")
+                document.getElementById('rwAdd').click();
+                await new Promise(r=>setTimeout(r,1100));
+                return {txt: (document.querySelector('.hit')||{}).innerText||'',
+                        warn: (document.querySelector('.warn')||{}).innerText||''} }""")
             check('a double tap is refused and said out loud, not swallowed',
                   '1 of 10' in r['txt'] and len(r['warn']) > 8, r)
 
@@ -289,13 +298,13 @@ async def main():
 
             # ---- the rule reaches the phone ---------------------------------
             r = await ipad.evaluate("""async () => {
-                STAB = 'rw'; renderStaff();
-                await new Promise(r=>setTimeout(r,300));
-                document.getElementById('srwN').value = '6';
-                document.getElementById('srwGift').value = 'A free lighter';
-                document.getElementById('srwSave').click();
-                await new Promise(r=>setTimeout(r,1200));
-                return {n: SHOP_REWARDS.visitsFor} }""")
+                TAB = 'rule'; drawTabs(); render();
+                await new Promise(r=>setTimeout(r,400));
+                document.getElementById('sN').value = '6';
+                document.getElementById('sGift').value = 'A free lighter';
+                document.getElementById('sSave').click();
+                await new Promise(r=>setTimeout(r,1400));
+                return {n: RULE && RULE.visitsFor} }""")
             check('the owner changes the rule at the counter', r['n'] == 6, r)
 
             await phone.reload()
@@ -322,21 +331,99 @@ async def main():
             check('an order placed on the phone reaches the shop', r['ok'] and r['live'], r)
 
             r = await ipad.evaluate("""async () => {
-                STAB = 'orders'; renderStaff();
-                await new Promise(r=>setTimeout(r,2600));
-                renderStaff();
-                return {txt: (document.querySelector('#staffBody')||{}).innerText||''} }""")
+                TAB = 'orders'; drawTabs();
+                await pullBoard();
+                await new Promise(r=>setTimeout(r,600));
+                return {txt: document.getElementById('view').innerText,
+                        n: (BOARD||[]).length} }""")
             check('and the counter board shows it, on the other device',
-                  'ZZ-4242' in r['txt'] or 'Geek Bar Pulse' in r['txt'], r['txt'][:300])
+                  r['n'] > 0 and 'Geek Bar Pulse' in r['txt'], r['txt'][:300])
             check('and the board says it is reading the shop, not this browser',
                   'not this browser' in r['txt'], r['txt'][:300])
 
-            # ---- the shop owns its list --------------------------------------
+            # ---- stage 174: email is the channel, and the box has a list ----
             r = await ipad.evaluate("""async () => {
                 const r = await fetch('/api/staff/members/export.csv', {credentials:'same-origin'});
                 return {status: r.status, body: await r.text()} }""")
             check('the whole member list downloads from the counter',
                   r['status'] == 200 and 'Ana,5205550134' in r['body'], r['body'][:200])
+            check('her address is on it, and so is the sentence she ticked',
+                  'ana@example.com' in r['body'] and 'birthday' in r['body'].lower(),
+                  r['body'][:300])
+            # She ticked a box that said email. Recording that as permission to
+            # text her would be consent to something nobody agreed to.
+            head, row = r['body'].split('\n')[0], [l for l in r['body'].split('\n') if 'Ana' in l][0]
+            cols = dict(zip(head.split(','), row.split(',')))
+            check('the consent is recorded as email and not as texting',
+                  cols.get('email_consent') == 'yes' and cols.get('sms_consent') == 'no', cols)
+
+            # THE BOX THAT USED TO LIE. It took a phone number, wrote it to
+            # localStorage, and said "You are on the list. One text when a real
+            # deal lands." There was no list and nothing was ever sent.
+            r = await phone.evaluate("""async () => {
+                go('home'); await new Promise(r=>setTimeout(r,900));
+                const box = document.getElementById('suEmail');
+                if(!box) return {missing: true};
+                box.value = 'deals@example.com';
+                document.querySelector('[data-signup]').click();
+                await new Promise(r=>setTimeout(r,1200));
+                return {toast: (document.querySelector('.toast')||{}).innerText||''} }""")
+            check('the deal alerts box takes an address, not a phone number',
+                  not r.get('missing'), r)
+
+            # The words on the card come from the SERVER, not the document:
+            # Shop.pullConfig() copies the rule over whatever the app shipped
+            # with. Stage 174 fixed the wording in the app and missed the
+            # server's default, and "a birthday text" came straight back on the
+            # hosted shop while the offline file read correctly. Two green
+            # suites can both be right and still miss the bug.
+            r = await phone.evaluate("""async () => {
+                go('rewards'); await new Promise(r=>setTimeout(r,700));
+                return {txt: document.querySelector('#v-rewards').innerText,
+                        perk: SHOP_REWARDS.perk} }""")
+            check('nothing the shop serves promises a text',
+                  'text' not in r['txt'].lower() and 'sms' not in r['txt'].lower(),
+                  [l for l in r['txt'].split('\n') if 'text' in l.lower() or 'sms' in l.lower()])
+            check('and the birthday promise is an email',
+                  'email' in r['perk'].lower(), r['perk'])
+
+            r = await ipad.evaluate("""async () => {
+                const r = await fetch('/api/staff/subscribers/export.csv', {credentials:'same-origin'});
+                return {status: r.status, body: await r.text()} }""")
+            check('and that address reached the shop, not one browser',
+                  r['status'] == 200 and 'deals@example.com' in r['body'], r['body'][:300])
+
+            # Getting off the list needs no sign in and no confirmation step. A
+            # list somebody cannot leave is a list that gets reported as spam.
+            r = await phone.evaluate("""async () => {
+                const r = await fetch('/api/subscribers/leave', {method:'POST',
+                  credentials:'same-origin', headers:{'content-type':'application/json'},
+                  body: JSON.stringify({email:'deals@example.com'})});
+                return {status: r.status} }""")
+            check('and leaving it takes one call and no account', r['status'] == 200, r)
+
+            # ---- nothing claims to send a text any more ----
+            r = await ipad.evaluate("""async () => {
+                TAB = 'orders'; drawTabs(); render();
+                await new Promise(r=>setTimeout(r,500));
+                return {txt: document.getElementById('view').innerText,
+                        tabs: TABS.map(t => t[1])} }""")
+            check('the counter no longer says it texts anybody',
+                  'text them' not in r['txt'] and 'customer notified' not in r['txt'],
+                  r['txt'][:300])
+            # No invented screens came across in the split. The old Staff view
+            # carried an AI phone tab of made-up call logs, a text blast tab
+            # with nothing behind it, and six customers who do not exist.
+            #
+            # Read off TABS rather than the page source, because the source
+            # contains a comment saying those screens were deliberately left
+            # out — and the first version of this check failed on its own
+            # explanation.
+            fake = [t for t in r['tabs']
+                    if t in ('AI phone', 'Text blast', 'Low stock', 'Media check', 'Connected')]
+            check('no invented screen came across in the split', not fake, r['tabs'])
+            check('and the ones that are there are the ones that do something',
+                  r['tabs'] == ['Orders', 'Rewards', 'Menu', 'Customers', 'Settings'], r['tabs'])
 
             check('no page errors anywhere in the flow', not errs, errs[:3])
 

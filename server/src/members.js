@@ -27,7 +27,7 @@
       same number is not an error, it is the retry queue doing its job.
    ===================================================================== */
 
-import { ok, fail, str, digits, nowIso } from './http.js';
+import { ok, fail, str, digits, email as cleanEmail, nowIso } from './http.js';
 import { codeVariants, memberToken, codeFor } from './ids.js';
 
 /* ---------------------------------------------------------------------
@@ -60,16 +60,16 @@ export async function progressFor(env, shop, memberId, rule) {
 /* What a customer's own phone is allowed to know about itself. Deliberately
    not the database row: no id, no token echoed back, no other member. */
 const cardOf = m => ({
-  first: m.first, phone: m.phone, code: m.code,
-  birthday: m.birthday, sms: !!m.sms, joined: m.joined
+  first: m.first, phone: m.phone, email: m.email, code: m.code,
+  birthday: m.birthday, sms: !!m.sms, emailOk: !!m.email_ok, joined: m.joined
 });
 
 /* What the counter is allowed to see. The phone number is here because the
    counter already has the customer standing in front of them and sometimes
    needs to check they typed the right code. */
 const counterOf = m => ({
-  first: m.first, code: m.code, phone: m.phone,
-  birthday: m.birthday, sms: !!m.sms, joined: m.joined
+  first: m.first, code: m.code, phone: m.phone, email: m.email,
+  birthday: m.birthday, sms: !!m.sms, emailOk: !!m.email_ok, joined: m.joined
 });
 
 /* ---------------------------------------------------------------------
@@ -98,7 +98,29 @@ export async function join(env, shop, body, rule) {
   let birthday = str(body.birthday, 8);
   if (birthday && !/^(1[0-2]|[1-9])-(3[01]|[12]\d|[1-9])$/.test(birthday)) birthday = '';
 
+  /* EMAIL IS VALIDATED BUT NOT REQUIRED, AND THE ASYMMETRY IS DELIBERATE.
+
+     The join form requires one, because email is the only channel the shop
+     has and a member without an address is a member nobody can ever reach.
+     This endpoint does not, because it also receives joins that were queued
+     on a phone BEFORE stage 174 existed — {first, phone, birthday, sms, …}
+     with no email in it at all. Refusing those would strand them in that
+     phone's retry queue forever, which is precisely the hole stage 170 was
+     written to close.
+
+     So a bad address is refused and an absent one is accepted. The export
+     shows the blank so the counter can ask for it next time they come in. */
+  const addr = cleanEmail(body.email);
+  if (body.email && !addr) {
+    return fail(400, 'bad email', 'That does not look like an email address.');
+  }
+
   const sms = body.sms ? 1 : 0;
+  /* Old queued joins carry `sms` as the consent flag and no `emailOk`. The
+     sentence they ticked at the time said texting, so it is not read as
+     permission to email — an absent emailOk means no. */
+  const emailOk = body.emailOk ? 1 : 0;
+  const terms = str(body.terms, 400);
   const joined = /^\d{4}-\d{2}-\d{2}T/.test(str(body.joined, 40))
     ? str(body.joined, 40) : nowIso();
 
@@ -118,12 +140,17 @@ export async function join(env, shop, body, rule) {
       ).bind(existing.id, first, birthday, sms).run();
       existing.left_at = null;
     } else if (first !== existing.first || sms !== existing.sms ||
+               (addr && addr !== existing.email) || emailOk !== existing.email_ok ||
                (birthday && birthday !== existing.birthday)) {
       /* A second join from the same number is how somebody corrects a typo in
-         their own name, so take the new one. */
+         their own name or their own address, so take the new one. An absent
+         address does not wipe one the shop already has. */
       await env.DB.prepare(
-        'UPDATE members SET first = ?2, birthday = ?3, sms = ?4 WHERE id = ?1'
-      ).bind(existing.id, first, birthday || existing.birthday, sms).run();
+        `UPDATE members SET first = ?2, birthday = ?3, sms = ?4, email = ?5,
+                            email_ok = ?6, contact_terms = ?7 WHERE id = ?1`
+      ).bind(existing.id, first, birthday || existing.birthday, sms,
+             addr || existing.email, emailOk,
+             terms || existing.contact_terms).run();
     }
     const fresh = await env.DB.prepare('SELECT * FROM members WHERE id = ?1')
       .bind(existing.id).first();
@@ -152,9 +179,11 @@ export async function join(env, shop, body, rule) {
 
   const token = memberToken();
   await env.DB.prepare(
-    `INSERT INTO members (shop, code, phone, first, birthday, sms, token, joined)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
-  ).bind(shop, code, phone, first, birthday, sms, token, joined).run();
+    `INSERT INTO members (shop, code, phone, email, first, birthday, sms,
+                          email_ok, contact_terms, token, joined)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+  ).bind(shop, code, phone, addr, first, birthday, sms, emailOk, terms,
+         token, joined).run();
 
   const row = await env.DB.prepare('SELECT * FROM members WHERE shop = ?1 AND phone = ?2')
     .bind(shop, phone).first();
@@ -323,7 +352,8 @@ const csvCell = v => {
 
 export async function exportCsv(env, shop, rule) {
   const rows = await env.DB.prepare(
-    `SELECT m.code, m.first, m.phone, m.birthday, m.sms, m.joined, m.left_at,
+    `SELECT m.code, m.first, m.phone, m.email, m.birthday, m.sms, m.email_ok,
+            m.contact_terms, m.joined, m.left_at,
             (SELECT COUNT(*) FROM visits v WHERE v.member_id = m.id)            AS visits,
             (SELECT MAX(at)   FROM visits v WHERE v.member_id = m.id)           AS last_visit,
             (SELECT COUNT(*)  FROM redemptions r WHERE r.member_id = m.id)      AS redemptions,
@@ -332,7 +362,10 @@ export async function exportCsv(env, shop, rule) {
   ).bind(shop).all();
 
   const need = Math.max(1, rule.visitsFor | 0);
-  const head = ['code', 'first_name', 'phone', 'birthday_month_day', 'sms_consent',
+  /* `consented_to` carries the exact sentence they ticked. A list that says
+     "yes" without saying yes to what is a list the shop cannot defend. */
+  const head = ['code', 'first_name', 'phone', 'email', 'birthday_month_day',
+    'email_consent', 'sms_consent', 'consented_to',
     'joined', 'left', 'visits_all_time', 'last_visit', 'rewards_redeemed',
     'visits_spent_on_rewards', 'visits_towards_next', 'rewards_ready'];
 
@@ -340,7 +373,8 @@ export async function exportCsv(env, shop, rule) {
   for (const r of (rows.results || [])) {
     const net = Math.max(0, (r.visits || 0) - (r.visits_spent || 0));
     lines.push([
-      r.code, r.first, r.phone, r.birthday, r.sms ? 'yes' : 'no',
+      r.code, r.first, r.phone, r.email, r.birthday,
+      r.email_ok ? 'yes' : 'no', r.sms ? 'yes' : 'no', r.contact_terms || '',
       r.joined, r.left_at || '', r.visits || 0, r.last_visit || '',
       r.redemptions || 0, r.visits_spent || 0, net % need, Math.floor(net / need)
     ].map(csvCell).join(','));
@@ -355,4 +389,59 @@ export async function exportCsv(env, shop, rule) {
       'content-disposition': 'attachment; filename="' + shop + '-members-' + stamp + '.csv"'
     }
   });
+}
+
+
+/* ---------------------------------------------------------------------
+   GET /api/staff/members/list?q=&limit=
+
+   The Customers screen. Until the counter app there wasn't one — the Staff
+   view's Customers tab was six hardcoded sample people, which was honest
+   enough when there was no member list and is a lie now that there is.
+
+   Ordered by who was in most recently, because that is the question somebody
+   at a counter actually has.
+
+   The `m.id DESC` tiebreak is not decoration. Timestamps here are ISO strings
+   to the millisecond, and a shop that takes two payments in the same
+   millisecond — or a member who joins in the same millisecond another gets a
+   visit — produces a tie. Without a second key SQLite is free to return them
+   in either order, so the list would reshuffle between three-second polls
+   while nothing had changed. Newest member first is the tiebreak; what
+   matters is that it is always the same one.
+   --------------------------------------------------------------------- */
+export async function list(env, shop, params, rule) {
+  const q = str(params.get('q') || '', 60).toLowerCase();
+  const limit = Math.max(1, Math.min(200, parseInt(params.get('limit'), 10) || 60));
+  const need = Math.max(1, rule.visitsFor | 0);
+
+  const rows = await env.DB.prepare(
+    `SELECT m.id, m.code, m.first, m.phone, m.email, m.birthday, m.email_ok,
+            m.joined, m.left_at,
+            (SELECT COUNT(*) FROM visits v WHERE v.member_id = m.id)  AS visits,
+            (SELECT MAX(at)  FROM visits v WHERE v.member_id = m.id)  AS last_visit,
+            (SELECT COALESCE(SUM(cost),0) FROM redemptions r WHERE r.member_id = m.id) AS spent
+       FROM members m WHERE m.shop = ?1 AND m.left_at IS NULL
+       ORDER BY COALESCE((SELECT MAX(at) FROM visits v WHERE v.member_id = m.id), m.joined) DESC,
+                m.id DESC
+       LIMIT ?2`
+  ).bind(shop, limit).all();
+
+  const members = [];
+  for (const r of (rows.results || [])) {
+    const hay = (r.first + ' ' + r.code + ' ' + r.phone + ' ' + r.email).toLowerCase();
+    if (q && hay.indexOf(q) < 0) continue;
+    const net = Math.max(0, (r.visits || 0) - (r.spent || 0));
+    members.push({
+      code: r.code, first: r.first, phone: r.phone, email: r.email,
+      birthday: r.birthday, emailOk: !!r.email_ok, joined: r.joined,
+      total: r.visits || 0, lastVisit: r.last_visit || '',
+      visits: net % need, need, ready: Math.floor(net / need)
+    });
+  }
+
+  const all = await env.DB
+    .prepare('SELECT COUNT(*) AS n FROM members WHERE shop = ?1 AND left_at IS NULL')
+    .bind(shop).first();
+  return ok({ members, total: all ? all.n : members.length });
 }

@@ -73,7 +73,9 @@ function fresh() {
   return { env, phone: new Device(env), ipad: new Device(env) };
 }
 
-const JOIN = { first: 'Ana', phone: '5205550134', birthday: '3-14', sms: true,
+const TERMS = 'Email me when something I actually want lands, and on my birthday.';
+const JOIN = { first: 'Ana', phone: '5205550134', email: 'ana@example.com',
+               birthday: '3-14', emailOk: true, sms: false, terms: TERMS,
                code: 'SP00000', joined: '2026-09-10T17:02:00.000Z' };
 
 async function counterIn(ipad) {
@@ -236,7 +238,8 @@ test('the whole member list exports as CSV, with what each reward cost', async (
   const a = await phone.call('/api/members', { method: 'POST', body: JOIN });
   const other = new Device(phone.env);
   await other.call('/api/members', { method: 'POST',
-    body: { first: 'Beto', phone: '5205550199', birthday: '11-2', sms: false } });
+    body: { first: 'Beto', phone: '5205550199', email: 'beto@example.com',
+            birthday: '11-2', emailOk: false, terms: TERMS } });
 
   await counterIn(ipad);
   for (let i = 0; i < 10; i++) {
@@ -253,8 +256,12 @@ test('the whole member list exports as CSV, with what each reward cost', async (
   const lines = csv.body.trim().split('\n');
   assert.equal(lines.length, 3, 'a header and both members');
   assert.match(lines[0], /visits_spent_on_rewards/);
-  assert.match(csv.body, /Ana,5205550134,3-14,yes/);
-  assert.match(csv.body, /Beto,5205550199,11-2,no/);
+  assert.match(lines[0], /email_consent,sms_consent,consented_to/);
+  assert.match(csv.body, /Ana,5205550134,ana@example\.com,3-14,yes,no,/);
+  assert.match(csv.body, /Beto,5205550199,beto@example\.com,11-2,no,no,/);
+  /* The sentence they ticked travels with the yes. A list that says "yes"
+     without saying yes to WHAT is a list the shop cannot defend. */
+  assert.match(csv.body, /Email me when something I actually want lands/);
   const ana = lines.find(l => l.includes('Ana'));
   assert.match(ana, /,10,/, 'ten visits all time');
 });
@@ -623,7 +630,13 @@ test('a join reaches the shop CRM without the customer waiting for it', async ()
   assert.match(seen[0].u, /abc123/);
   /* The flat shape a GoHighLevel inbound webhook was set up for. */
   assert.deepEqual(Object.keys(seen[0].body).sort(),
-    ['birthday', 'code', 'first', 'joined', 'phone', 'shop', 'sms']);
+    ['birthday', 'code', 'email', 'emailOk', 'first', 'joined', 'phone',
+     'shop', 'sms', 'terms']);
+  assert.equal(seen[0].body.email, 'ana@example.com');
+  assert.equal(seen[0].body.emailOk, true);
+  /* The shop is not doing SMS. A CRM that receives sms:true will eventually
+     act on it, and the person never agreed to that. */
+  assert.equal(seen[0].body.sms, false);
 });
 
 /* =====================================================================
@@ -665,4 +678,108 @@ test('availability never invents a stock count', async () => {
   const r = await phone.call('/api/availability?ids=x1');
   assert.equal(r.body.availability.x1.tracked, false);
   assert.equal(r.body.availability.x1.onHand, null);
+});
+
+/* =====================================================================
+   EMAIL, AND THE LIST THAT USED TO NOT EXIST
+   ===================================================================== */
+
+test('an address that could not be sent to is refused', async () => {
+  const { phone } = fresh();
+  for (const bad of ['nope', 'a@b', 'a b@c.com', 'a@@b.com', 'a@b..com']) {
+    const r = await phone.call('/api/members', { method: 'POST',
+      body: Object.assign({}, JOIN, { email: bad }) });
+    assert.equal(r.status, 400, bad + ' was accepted');
+    assert.equal(r.body.reason, 'bad email');
+  }
+});
+
+test('a join queued before there was an email field is still accepted', async () => {
+  /* THE SUBTLE ONE. A phone that queued a join under stage 171 holds
+     {first, phone, birthday, sms, code, joined, shop} and no address. If this
+     endpoint required an email, that item would fail forever in that phone's
+     retry queue — which is exactly the hole stage 170 was written to close.
+     A bad address is refused; an absent one is not. */
+  const { phone } = fresh();
+  const old = { first: 'Ana', phone: '5205550134', birthday: '3-14', sms: true,
+                code: 'SP00000', joined: '2026-09-10T17:02:00.000Z' };
+  const r = await phone.call('/api/members', { method: 'POST', body: old });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.member.email, '');
+  /* And the sentence they actually ticked back then said texting, so it is
+     not read as permission to email them. */
+  assert.equal(r.body.member.emailOk, false);
+});
+
+test('an address added on a second join is kept, and an absent one does not wipe it', async () => {
+  const { phone } = fresh();
+  await phone.call('/api/members', { method: 'POST', body: JOIN });
+  const blanked = await phone.call('/api/members', { method: 'POST',
+    body: { first: 'Ana', phone: '5205550134' } });
+  assert.equal(blanked.body.member.email, 'ana@example.com', 'still hers');
+
+  const moved = await phone.call('/api/members', { method: 'POST',
+    body: Object.assign({}, JOIN, { email: 'ANA@Example.COM ' }) });
+  assert.equal(moved.body.member.email, 'ana@example.com', 'and normalised');
+});
+
+test('the deal alerts box reaches the shop instead of one browser', async () => {
+  /* It used to write the number to localStorage and say "You are on the list.
+     One text when a real deal lands." There was no list. */
+  const { phone, ipad } = fresh();
+  const r = await phone.call('/api/subscribers', { method: 'POST',
+    body: { email: 'Deals@Example.com', source: 'home', terms: TERMS } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.email, 'deals@example.com');
+
+  await counterIn(ipad);
+  const csv = await ipad.call('/api/staff/subscribers/export.csv');
+  assert.equal(csv.status, 200);
+  assert.match(csv.body, /deals@example\.com,home,/);
+  assert.match(csv.body, /Email me when something I actually want lands/);
+});
+
+test('subscribing twice is not an error', async () => {
+  const { phone } = fresh();
+  await phone.call('/api/subscribers', { method: 'POST', body: { email: 'a@b.com' } });
+  const again = await phone.call('/api/subscribers', { method: 'POST', body: { email: 'a@b.com' } });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.already, true);
+});
+
+test('getting off the list is the easiest thing on the service', async () => {
+  /* No token, no confirmation step, no sign in. A list somebody cannot get
+     off is a list that gets reported as spam, and one complaint costs more
+     than every address a confirmation step would have saved. */
+  const { phone } = fresh();
+  await phone.call('/api/members', { method: 'POST', body: JOIN });
+  await phone.call('/api/subscribers', { method: 'POST', body: { email: 'ana@example.com' } });
+
+  const off = await phone.call('/api/subscribers/leave', { method: 'POST',
+    body: { email: 'ana@example.com' } });
+  assert.equal(off.status, 200);
+
+  const { ipad } = fresh();
+  const back = await phone.call('/api/subscribers', { method: 'POST',
+    body: { email: 'ana@example.com' } });
+  assert.equal(back.body.already, false, 'and they can come back');
+});
+
+test('unsubscribing takes them off the member list too, not just the newsletter', async () => {
+  const { phone, ipad } = fresh();
+  await phone.call('/api/members', { method: 'POST', body: JOIN });
+  await phone.call('/api/subscribers/leave', { method: 'POST', body: { email: 'ana@example.com' } });
+
+  await counterIn(ipad);
+  const csv = await ipad.call('/api/staff/members/export.csv');
+  const ana = csv.body.split('\n').find(l => l.includes('Ana'));
+  assert.match(ana, /ana@example\.com,3-14,no,/, 'email consent is off');
+  /* Still a member with her visits. She asked not to be emailed, not to be
+     forgotten. */
+  assert.match(ana, /^SP\d{5},Ana,/);
+});
+
+test('the subscriber list is not readable without a staff session', async () => {
+  const { phone } = fresh();
+  assert.equal((await phone.call('/api/staff/subscribers/export.csv')).status, 401);
 });

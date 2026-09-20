@@ -38,6 +38,13 @@ database_name = "smokers-paradise"
 # identifier and it belongs in version control so a redeploy is reproducible.
 database_id = "PASTE_THE_ID_FROM_db:create"
 
+# Photographs uploaded from the counter. The pictures that ship with the app
+# are static assets (stage 172); this is for the ones the shop takes itself.
+# Create it with:  npx wrangler r2 bucket create smokers-paradise-media
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "smokers-paradise-media"
+
 [triggers]
 # Drains the CRM queue. A webhook that was down when somebody joined should
 # not wait for that person to open the app again — stage 170's lesson, moved

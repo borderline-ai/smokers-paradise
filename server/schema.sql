@@ -42,9 +42,15 @@ CREATE TABLE IF NOT EXISTS members (
   shop      TEXT    NOT NULL,
   code      TEXT    NOT NULL,
   phone     TEXT    NOT NULL,              -- digits only, ten of them
+  email     TEXT    NOT NULL DEFAULT '',
   first     TEXT    NOT NULL,
   birthday  TEXT    NOT NULL DEFAULT '',   -- 'M-D', or empty. Never a year.
+  -- Consent, and what was consented TO. `contact_terms` holds the exact
+  -- sentence the person ticked, because "they opted in" is not an answer to a
+  -- complaint and the wording on the form will change over time.
   sms       INTEGER NOT NULL DEFAULT 0,
+  email_ok  INTEGER NOT NULL DEFAULT 0,
+  contact_terms TEXT NOT NULL DEFAULT '',
   token     TEXT    NOT NULL,
   joined    TEXT    NOT NULL,
   left_at   TEXT,
@@ -53,6 +59,33 @@ CREATE TABLE IF NOT EXISTS members (
 );
 CREATE INDEX IF NOT EXISTS members_token ON members (token);
 CREATE INDEX IF NOT EXISTS members_bday  ON members (shop, birthday);
+
+-- ---------------------------------------------------------------------
+-- SUBSCRIBERS
+--
+-- The one-field box on the front page. It is not a membership: no code, no
+-- visits, no card — just somebody who wants to hear when a real deal lands.
+--
+-- It exists because that box used to lie. It took a phone number, wrote it to
+-- localStorage, and said "You are on the list. One text when a real deal
+-- lands." There was no list, nothing was sent, and nobody was ever told. A
+-- form that does nothing is worse than no form: the customer believes they
+-- have done something and stops looking for the real way in.
+--
+-- Email rather than a number, because SMS to a smoke shop's customers means
+-- fighting carrier content rules on the phrasing of every promotion. Email
+-- has no such fight.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscribers (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop     TEXT    NOT NULL,
+  email    TEXT    NOT NULL,
+  source   TEXT    NOT NULL DEFAULT '',   -- which screen they came from
+  terms    TEXT    NOT NULL DEFAULT '',   -- the sentence they agreed to
+  created  TEXT    NOT NULL,
+  left_at  TEXT,
+  UNIQUE (shop, email)
+);
 
 -- ---------------------------------------------------------------------
 -- VISITS

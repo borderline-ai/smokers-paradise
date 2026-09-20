@@ -24,7 +24,7 @@ import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'node:fs';
 
 import worker from '../src/index.js';
 import { makeD1 } from '../test/d1.mjs';
@@ -46,7 +46,37 @@ const TYPES = {
   '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
 };
 
+/* R2, as a folder. The Worker uses three calls — head, put, get — so that is
+   what this provides and nothing more. A photograph uploaded from the counter
+   lands in server/media/ under `npm run serve` and in the bucket in
+   production, and `img/<hash>.webp` means the same thing either way. */
+const MEDIA_DIR = join(ROOT, 'media');
+const localBucket = {
+  async head(key) {
+    const f = join(MEDIA_DIR, key);
+    return existsSync(f) ? { size: statSync(f).size } : null;
+  },
+  async put(key, bytes, opts) {
+    const f = join(MEDIA_DIR, key);
+    mkdirSync(dirname(f), { recursive: true });
+    writeFileSync(f, Buffer.from(bytes));
+    writeFileSync(f + '.type', (opts && opts.httpMetadata && opts.httpMetadata.contentType) || '');
+  },
+  async get(key) {
+    const f = join(MEDIA_DIR, key);
+    if (!existsSync(f)) return null;
+    const buf = readFileSync(f);
+    const type = existsSync(f + '.type') ? readFileSync(f + '.type', 'utf8') : 'application/octet-stream';
+    return {
+      body: new Blob([buf]).stream(),
+      httpEtag: '"' + buf.length + '-' + statSync(f).mtimeMs + '"',
+      writeHttpMetadata(h) { h.set('content-type', type || 'application/octet-stream'); }
+    };
+  }
+};
+
 const env = {
+  MEDIA: localBucket,
   DB: makeD1(join(ROOT, 'schema.sql'), process.env.SP_DB || ':memory:'),
   SHOP: process.env.SHOP || 'smokers-paradise',
   STAFF_PIN: process.env.STAFF_PIN || '7413',

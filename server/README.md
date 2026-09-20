@@ -18,7 +18,8 @@ keep serving the standalone walkthrough file. It cannot be the shop.
 
 | Table | What it is |
 | --- | --- |
-| `members` | first name, phone, birthday as month-day with no year, sms consent, code, joined, and an opaque token that is the phone's key to its own card |
+| `members` | first name, phone, **email**, birthday as month-day with no year, consent **and the exact sentence consented to**, code, joined, and an opaque token that is the phone's key to its own card |
+| `subscribers` | the deal-alerts list. Not a membership — an address and an unsubscribe |
 | `visits` | one row per visit, with which staff session wrote it |
 | `redemptions` | with `cost` — **the visit price at the moment it happened**, see stage 167 |
 | `orders` / `order_items` | the ticket exactly as placed, plus lines so the shop can see what sells |
@@ -164,6 +165,8 @@ surface off.
 | | |
 | --- | --- |
 | `GET /api/config` | the rewards rule and tax. The CRM webhook is **not** in here. |
+| `POST /api/subscribers` | the front-page deal-alerts box. Before this it wrote to localStorage and lied about it. |
+| `POST /api/subscribers/leave` | no token, no confirmation, no account. Unsubscribing is the easiest thing on the service. |
 | `POST /api/members` | join. Body is the flat `{first, phone, birthday, sms, code, joined, shop}` the app already sends to a GoHighLevel webhook. |
 | `GET /api/members/me?token=` | a phone reading its own card. Read only. |
 | `POST /api/members/me/leave` | leaving. The row is kept, flagged. |
@@ -184,7 +187,11 @@ surface off.
 | `GET /api/staff/members?code=` | **the call that did not exist.** Its absence is what made the rewards programme a demo. |
 | `POST /api/staff/members/:code/visit` | `{force}` gets past the thirty-second double-tap guard. |
 | `POST /api/staff/members/:code/redeem` | refused when nothing is ready, stamped with what it cost. |
-| `GET /api/staff/members/export.csv` | the whole list. |
+| `GET /api/staff/members/list` | the Customers screen. Deterministically ordered — see the tiebreak note in members.js. |
+| `GET /api/staff/catalog` | the shelf as the editor needs it, hidden products included. |
+| `POST /api/staff/media` | raw image bytes in, `img/<hash>.ext` out. Type read from the bytes, not the header. |
+| `GET /api/staff/members/export.csv` | the whole list, with addresses and what each person agreed to. |
+| `GET /api/staff/subscribers/export.csv` | the deal-alerts list. |
 | `GET` / `POST /api/staff/config` | the rule. The owner's copy includes the CRM webhook. |
 | `POST /api/staff/catalog/seed` | the shelf, once. |
 | `POST /api/staff/catalog/overrides` | price and menu edits. A photo is a path; a data: URI is refused, not truncated. |
@@ -195,8 +202,8 @@ surface off.
 ## Tests
 
 ```bash
-npm test                          # 58 checks, offline, nothing installed
-python3 ../test/live_backend.py   # 29 checks, two real browsers, real service
+npm test                          # 81 checks, offline, nothing installed
+python3 ../test/live_backend.py   # 40 checks, two real browsers, real service
 ```
 
 `npm test` drives the real Worker handler over real requests, against
@@ -211,6 +218,50 @@ existed.
 A caution from `CLAUDE.md` that applies here too: **two green suites can both be
 right and still miss the bug.** Ask what a number means, not just whether it
 passes.
+
+---
+
+## Email, and why not SMS
+
+The shop's channel is email. That is a decision — see CLAUDE.md for the long
+version. Short version: US carriers filter application-to-person messaging on
+content under SHAFT (Sex, Hate, Alcohol, Firearms, **Tobacco**), a smoke shop
+is the T, and even an approved campaign has promotional messages silently
+dropped. Email has no such fight.
+
+**Nothing here sends email.** Joins and deal-alerts signups both land in the
+database and both forward to the CRM webhook in `config.rewards.endpoint`,
+which is where GoHighLevel picks them up and sends. If you add a sender later,
+check the provider's acceptable use policy covers vape retail first — several
+mainstream ESPs do not, and the failure mode is an account closed with the list
+inside it. Ask them; do not omit the industry.
+
+Two things the service is strict about, because they are what keeps the list
+defensible:
+
+- **Consent records what was consented to.** `members.contact_terms` holds the
+  exact sentence, and it is a column on the export. "They opted in" is not an
+  answer to a complaint.
+- **A join queued before stage 174 has no address, and is accepted anyway.**
+  Refusing it would strand it in that phone's retry queue forever, which is the
+  hole stage 170 was written to close. A bad address is refused; an absent one
+  is not.
+
+---
+
+## The counter
+
+`/counter` serves `app/counter.html` — a separate 36 KB app, not the customer
+app with a flag on it. It talks only to this service and keeps nothing locally.
+
+Photographs uploaded from it need an R2 bucket:
+
+```bash
+npx wrangler r2 bucket create smokers-paradise-media
+```
+
+The binding is already in `wrangler.toml`. Under `npm run serve` they land in
+`server/media/` instead, so the whole flow works with no account.
 
 ---
 

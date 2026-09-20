@@ -6,3 +6,5 @@ node_modules/
 public/
 *.db
 *.db-journal
+# Photographs uploaded through the local server. The bucket in production.
+media/

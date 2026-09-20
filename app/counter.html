@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#08060F">
+<title>Register &middot; Smokers Paradise</title>
+
+<!--
+  =====================================================================
+  THE COUNTER.
+
+  A second app, and the reason it exists is weight. The customer app is
+  1.9 MB of document plus 309 photographs, and the counter was loading all
+  of it to show a lookup box and a ticket list — fifty times a day, on
+  whatever phone the person behind the till happens to own.
+
+  This is about sixty kilobytes and no pictures until one is asked for.
+
+  IT OWNS NOTHING. Every number on this screen came from the shop's
+  database a second ago. There is no localStorage here and that is
+  deliberate: the customer app keeps a local cache because it has to work
+  on a phone in a dead spot, and a till that guesses is worse than a till
+  that says it cannot reach the shop. If the service is down, this says so
+  and refuses, rather than showing a stale visit count somebody might act
+  on.
+
+  IT CONTAINS NO SAMPLE SCREENS. The old Staff view carried an AI phone
+  tab of invented call logs, a text blast tab with nothing behind it, and a
+  Customers tab of six people who do not exist. None of them are here.
+  Carrying a fake screen into the thing an owner uses every day is how they
+  stop believing the real ones.
+
+  THE PIN IS CHECKED BY THE SERVER. A PIN compared in JavaScript is a
+  decoration: this file is served to anyone who asks for it.
+  =====================================================================
+-->
+
+<style>
+:root{
+  --bg:#08060F; --card:#15111F; --card2:#1D1729; --hair:#2C2438;
+  --ink:#F4F1F8; --body:#B9B3C6; --muted:#807A90;
+  --hot:#FF2E88; --go:#1FCB8B; --go-ink:#7BF3C8; --warn:#FFB020; --bad:#FF5A6E;
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body{padding-bottom:env(safe-area-inset-bottom)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+.hide{display:none!important}
+
+/* ---- the PIN door ---- */
+#door{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px;z-index:60}
+#door h1{font-size:26px;letter-spacing:-.03em;margin:0 0 4px}
+#door p{color:var(--muted);margin:0 0 22px;font-size:14px}
+#dots{display:flex;gap:12px;margin-bottom:26px}
+#dots i{width:12px;height:12px;border-radius:50%;background:var(--hair);transition:.15s}
+#dots i.f{background:var(--hot);transform:scale(1.15)}
+#keys{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px}
+#keys button{background:var(--card);border:1px solid var(--hair);border-radius:var(--r);
+  padding:18px 0;font-size:22px;font-weight:600}
+#keys button:active{background:var(--card2)}
+#doorMsg{color:var(--bad);margin-top:18px;min-height:20px;font-size:13.5px;text-align:center}
+
+/* ---- chrome ---- */
+header{position:sticky;top:0;z-index:20;background:rgba(8,6,15,.94);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--hair);
+  padding:calc(10px + env(safe-area-inset-top)) 14px 0}
+.htop{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.htop b{font-size:17px;letter-spacing:-.02em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--go);flex:none}
+.dot.off{background:var(--bad)}
+.htop .sp{flex:1}
+.htop button{color:var(--muted);font-size:13px;padding:6px 10px;border-radius:9px;
+  border:1px solid var(--hair)}
+nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px}
+nav::-webkit-scrollbar{display:none}
+nav button{white-space:nowrap;padding:8px 14px;border-radius:999px;font-size:13.5px;
+  font-weight:600;color:var(--body);background:var(--card);border:1px solid var(--hair)}
+nav button.on{background:var(--hot);border-color:var(--hot);color:#fff}
+nav button .n{display:inline-block;margin-left:6px;background:rgba(255,255,255,.16);
+  border-radius:999px;padding:0 6px;font-size:11.5px}
+main{padding:14px 14px 40px;max-width:760px;margin:0 auto}
+
+/* ---- shared ---- */
+.card{background:var(--card);border:1px solid var(--hair);border-radius:var(--r);
+  padding:14px;margin-bottom:12px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:6px;font-weight:700}
+.btn{display:block;width:100%;padding:14px;border-radius:12px;background:var(--hot);
+  color:#fff;font-weight:700;font-size:15px;text-align:center}
+.btn:active{filter:brightness(.9)}
+.btn.ghost{background:var(--card2);color:var(--ink);border:1px solid var(--hair)}
+.btn.go{background:var(--go);color:#04160F}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+label.f{display:block;margin-bottom:10px}
+label.f span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600}
+input[type=text],input[type=search],input[type=number],input[type=email],input:not([type]){
+  width:100%;padding:12px;border-radius:11px;border:1px solid var(--hair);
+  background:var(--card2);outline:none}
+input:focus{border-color:var(--hot)}
+.warn{background:rgba(255,90,110,.12);border:1px solid rgba(255,90,110,.4);
+  color:#FFC2C9;border-radius:11px;padding:10px 12px;margin-bottom:10px;font-size:13.5px}
+.note{color:var(--muted);font-size:12.5px;line-height:1.5;margin:10px 0 0}
+.empty{text-align:center;padding:38px 16px;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;
+  background:#241C33;border:1px solid var(--hair);border-radius:12px;padding:12px 18px;
+  font-size:14px;z-index:70;transition:.22s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---- tickets ---- */
+.tk{background:var(--card);border:1px solid var(--hair);border-radius:var(--r);
+  padding:13px;margin-bottom:11px}
+.tk.rdy{border-color:rgba(31,203,139,.5)}
+.tk.here{border-color:var(--warn)}
+.tk-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.tk-top b{font-size:17px}
+.tag{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  padding:3px 7px;border-radius:6px;background:var(--card2);color:var(--muted)}
+.tag.here{background:rgba(255,176,32,.18);color:var(--warn)}
+.tag.otw{background:rgba(255,46,136,.16);color:#FF86B6}
+.tk .ago{margin-left:auto;color:var(--muted);font-size:12px}
+.tk-items div{display:flex;gap:8px;padding:3px 0;font-size:14px}
+.tk-items .q{color:var(--hot);font-weight:700;min-width:26px}
+.tk-items em{color:var(--muted);font-style:normal;font-size:12.5px}
+.tk-tot{display:flex;justify-content:space-between;align-items:center;
+  border-top:1px solid var(--hair);margin-top:9px;padding-top:9px;font-weight:700}
+.tk-rw{background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.35);
+  border-radius:10px;padding:8px 10px;margin-top:9px;font-size:13px;color:#FFD68A}
+.tk-foot{display:flex;gap:8px;margin-top:10px}
+.tk-foot button{flex:1;padding:12px;border-radius:11px;font-weight:700;font-size:14px}
+
+/* ---- member ---- */
+.hit{background:var(--card2);border:1px solid var(--hair);border-radius:var(--r);
+  padding:14px;margin-top:12px}
+.hit h3{margin:0 0 2px;font-size:20px}
+.hit .sub{color:var(--muted);font-size:13px}
+.dots{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.dots i{width:14px;height:14px;border-radius:50%;background:var(--hair)}
+.dots i.on{background:var(--hot)}
+.ready{background:rgba(31,203,139,.14);border:1px solid rgba(31,203,139,.45);
+  color:var(--go-ink);border-radius:11px;padding:10px 12px;margin:10px 0;font-weight:700}
+
+/* ---- lists ---- */
+.lrow{display:flex;gap:11px;align-items:center;background:var(--card);
+  border:1px solid var(--hair);border-radius:12px;padding:10px;margin-bottom:8px}
+.lrow .th{width:46px;height:46px;border-radius:9px;background:var(--card2);flex:none;
+  overflow:hidden;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:10px}
+.lrow .th img{width:100%;height:100%;object-fit:cover}
+.lrow .t{flex:1;min-width:0}
+.lrow .t b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.lrow .t small{color:var(--muted);font-size:12px}
+.lrow .pr{font-weight:700;font-size:13px;color:var(--ink)}
+/* The name is what somebody is scanning for, so it gets the width. Before
+   this the price and the button squeezed it down to "Gee…" on a phone.
+
+   Scoped to .prod on purpose: a product's second line is price and brand and
+   fits, a member's is a code, a visit count and a last-seen date and does
+   not. Clipping it to "SP95947 · 8 of 1…" hides the number somebody came to
+   this screen to read. */
+.lrow .t b{font-size:14.5px}
+.lrow.prod .t small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow.mem .t small{display:block;line-height:1.4}
+.lrow.off{opacity:.5}
+.lrow button.mini{padding:8px 11px;border-radius:9px;background:var(--card2);
+  border:1px solid var(--hair);font-size:12.5px;font-weight:600}
+
+/* ---- sheet ---- */
+#sheet{position:fixed;inset:0;z-index:50;display:none}
+#sheet.on{display:block}
+#sheet .scrim{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+#sheet .pane{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;
+  background:var(--card);border-radius:20px 20px 0 0;border-top:1px solid var(--hair);
+  padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+#sheet h3{margin:0 0 14px;font-size:19px}
+@media(min-width:700px){#sheet .pane{left:50%;transform:translateX(-50%);max-width:620px;
+  border-radius:20px;bottom:5vh}}
+</style>
+</head>
+<body>
+
+<div id="door">
+  <h1>Register</h1>
+  <p>Enter the 4 digit shop PIN.</p>
+  <div id="dots"><i></i><i></i><i></i><i></i></div>
+  <div id="keys"></div>
+  <div id="doorMsg"></div>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <div class="htop">
+      <span class="dot" id="live"></span>
+      <b>Register</b>
+      <span class="sp"></span>
+      <button id="out">Sign out</button>
+    </div>
+    <nav id="tabs"></nav>
+  </header>
+  <main id="view"></main>
+</div>
+
+<div id="sheet"><div class="scrim"></div><div class="pane" id="pane"></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   THE ONE DOOR TO THE SHOP.
+
+   Same rule as the customer app's `call()`, and for the same reason: a
+   static host answers an unknown path with its own HTML and a 200, and
+   reading that as an answer would show a counter things that are not
+   true. Anything that is not JSON is treated as no service at all.
+
+   Unlike the customer app, this one keeps the server's sentence. Every
+   refusal the counter can get is something a person has to say out loud to
+   somebody standing in front of them.
+   ===================================================================== */
+const API = '/api';
+let ONLINE = true;
+
+async function api(path, opts){
+  try{
+    const r = await fetch(API + path, Object.assign({
+      credentials: 'same-origin',
+      headers: {'content-type': 'application/json'}
+    }, opts || {}));
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if(ct.indexOf('json') < 0 && ct.indexOf('csv') < 0){ setLive(false); return null }
+    setLive(true);
+    if(ct.indexOf('csv') >= 0) return {ok: r.ok, status: r.status, text: await r.text()};
+    const body = await r.json().catch(()=>null);
+    if(!body){ setLive(false); return null }
+    return {ok: r.ok && body.ok !== false, status: r.status, body: body};
+  }catch(e){ setLive(false); return null }
+}
+
+/* "Could not reach the shop" and "the shop said no" are different facts and
+   a counter has to be able to tell them apart. */
+function why(r, fallback){
+  if(!r) return 'Could not reach the shop. Check the connection.';
+  return (r.body && (r.body.detail || r.body.reason)) || fallback || 'That did not work.';
+}
+
+function setLive(on){
+  if(ONLINE === on) return;
+  ONLINE = on;
+  const d = document.getElementById('live');
+  if(d) d.className = 'dot' + (on ? '' : ' off');
+  if(!on) toast('Lost the shop. Nothing on this screen is live.');
+}
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => '$' + (Math.round(Number(n || 0) * 100) / 100).toFixed(2);
+
+let _toast;
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(_toast);
+  _toast = setTimeout(()=>t.classList.remove('on'), 3200);
+}
+
+function ago(ms){
+  if(!ms) return '';
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if(s < 60) return 'just now';
+  if(s < 3600) return Math.floor(s/60) + ' min';
+  if(s < 86400) return Math.floor(s/3600) + ' hr';
+  return Math.floor(s/86400) + ' days';
+}
+/* "just now" is a complete phrase and "5 min" is not, so one of them takes
+   an "ago" and the other does not. Worth a function rather than a template:
+   the first version of this printed "last in just now ago". */
+function agoPhrase(iso){
+  const t = Date.parse(iso || '');
+  if(!t) return '';
+  const a = ago(t);
+  return a === 'just now' ? a : a + ' ago';
+}
+
+function sheet(html){
+  $('#pane').innerHTML = html;
+  $('#sheet').classList.add('on');
+}
+function closeSheet(){ $('#sheet').classList.remove('on') }
+$('#sheet').addEventListener('click', e => { if(e.target.classList.contains('scrim')) closeSheet() });
+
+/* =====================================================================
+   THE DOOR
+   ===================================================================== */
+let PIN = '';
+$('#keys').innerHTML = [1,2,3,4,5,6,7,8,9,'',0,'&larr;']
+  .map(k => k === '' ? '<span></span>' : `<button data-k="${k}">${k}</button>`).join('');
+
+function drawPin(){
+  document.querySelectorAll('#dots i').forEach((d,i)=>d.classList.toggle('f', i < PIN.length));
+}
+
+$('#keys').onclick = async e => {
+  const b = e.target.closest('[data-k]'); if(!b) return;
+  const k = b.dataset.k;
+  if(k === '&larr;') PIN = PIN.slice(0, -1);
+  else if(PIN.length < 4) PIN += k;
+  drawPin();
+  if(PIN.length !== 4) return;
+
+  const tried = PIN;
+  $('#doorMsg').textContent = '';
+  const r = await api('/staff/session', {method:'POST', body: JSON.stringify({pin: tried})});
+  if(r && r.ok){
+    $('#door').classList.add('hide');
+    $('#app').classList.remove('hide');
+    start();
+    return;
+  }
+  PIN = ''; drawPin();
+  $('#doorMsg').textContent = why(r, 'That PIN is not right.');
+};
+
+$('#out').onclick = async () => {
+  await api('/staff/session', {method:'DELETE'});
+  stop();
+  $('#app').classList.add('hide');
+  $('#door').classList.remove('hide');
+  PIN = ''; drawPin();
+  $('#doorMsg').textContent = '';
+};
+
+/* Already signed in? The cookie outlives a page reload, and a counter that
+   makes somebody type the PIN again every time the screen sleeps is a
+   counter that gets left signed in on purpose. */
+(async function(){
+  const r = await api('/staff/orders');
+  if(r && r.ok){
+    $('#door').classList.add('hide');
+    $('#app').classList.remove('hide');
+    start();
+  }
+})();
+
+/* =====================================================================
+   TABS
+   ===================================================================== */
+const TABS = [
+  ['orders', 'Orders'],
+  ['rewards', 'Rewards'],
+  ['menu', 'Menu'],
+  ['people', 'Customers'],
+  ['rule', 'Settings']
+];
+let TAB = 'orders';
+let OPEN_N = 0;
+
+function drawTabs(){
+  $('#tabs').innerHTML = TABS.map(([k,l]) =>
+    `<button class="${TAB===k?'on':''}" data-tab="${k}">${l}${
+      k === 'orders' && OPEN_N ? `<span class="n">${OPEN_N}</span>` : ''}</button>`).join('');
+}
+$('#tabs').onclick = e => {
+  const b = e.target.closest('[data-tab]'); if(!b) return;
+  TAB = b.dataset.tab; drawTabs(); render();
+};
+
+let BOARD = null, RULE = null, POLL = null;
+
+function start(){
+  drawTabs();
+  pullRule();
+  pullBoard();
+  clearInterval(POLL);
+  POLL = setInterval(()=>{ if(TAB === 'orders' || OPEN_N === 0) pullBoard() }, 3000);
+}
+function stop(){ clearInterval(POLL); POLL = null; BOARD = null; }
+
+async function pullRule(){
+  const r = await api('/staff/config');
+  if(r && r.ok) RULE = r.body.rewards;
+}
+
+let CHIME = null;
+let SEEN = null;
+function chime(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    CHIME = CHIME || new AC();
+    if(CHIME.state === 'suspended') CHIME.resume();
+    const t = CHIME.currentTime;
+    [[880,0],[1318.5,.13]].forEach(([hz,at])=>{
+      const o = CHIME.createOscillator(), g = CHIME.createGain();
+      o.type='sine'; o.frequency.value=hz;
+      g.gain.setValueAtTime(.0001,t+at);
+      g.gain.exponentialRampToValueAtTime(.16,t+at+.02);
+      g.gain.exponentialRampToValueAtTime(.0001,t+at+.34);
+      o.connect(g); g.connect(CHIME.destination); o.start(t+at); o.stop(t+at+.36);
+    });
+  }catch(e){}
+}
+
+async function pullBoard(){
+  const r = await api('/staff/orders');
+  if(!r) return;
+  if(r.status === 401){ stop(); $('#app').classList.add('hide');
+    $('#door').classList.remove('hide'); $('#doorMsg').textContent = 'Signed out. Enter the PIN again.';
+    return; }
+  if(!r.ok) return;
+  BOARD = r.body.orders || [];
+  OPEN_N = BOARD.length;
+
+  /* Nobody watches a screen during a rush. */
+  const codes = BOARD.map(o=>o.code);
+  if(SEEN === null) SEEN = codes.slice();
+  else{
+    const fresh = codes.filter(c => SEEN.indexOf(c) < 0);
+    SEEN = codes.slice();
+    if(fresh.length) chime();
+  }
+  drawTabs();
+  if(TAB === 'orders') render();
+}
+
+/* =====================================================================
+   RENDER
+   ===================================================================== */
+function render(){
+  const v = $('#view');
+  if(TAB === 'orders')  return v.innerHTML = viewOrders();
+  if(TAB === 'rewards') return v.innerHTML = viewRewards(), wireRewards();
+  if(TAB === 'menu')    return drawMenu();
+  if(TAB === 'people')  return drawPeople();
+  if(TAB === 'rule')    return v.innerHTML = viewRule(), wireRule();
+}
+
+/* ---- orders ---- */
+function viewOrders(){
+  if(!BOARD) return '<div class="empty"><b>Reading the shop…</b></div>';
+  if(!BOARD.length){
+    return `<div class="empty"><b>No open tickets</b>
+      <p>An order placed on any phone, anywhere, lands here within a couple of seconds.</p></div>`;
+  }
+  const sorted = BOARD.slice().sort((a,b)=>
+    (b.custState==='here'?1:0)-(a.custState==='here'?1:0) ||
+    (b.custState==='otw'?1:0)-(a.custState==='otw'?1:0) ||
+    (a.placedAt||0)-(b.placedAt||0));
+
+  return sorted.map(o=>`
+    <div class="tk ${o.status==='ready'?'rdy':''} ${o.custState==='here'?'here':''}">
+      <div class="tk-top">
+        <b>#${esc(o.n)}</b>
+        <span>${esc(o.who)}</span>
+        ${o.custState==='here'?'<span class="tag here">At the counter</span>':
+          o.custState==='otw'?'<span class="tag otw">On the way</span>':''}
+        <span class="ago">${ago(o.placedAt)}</span>
+      </div>
+      ${o.pickup?`<div class="note" style="margin:0 0 7px">Wants it at <b>${esc(o.pickup)}</b></div>`:''}
+      <div class="tk-items">${(o.items||[]).map(i=>
+        `<div><span class="q">${esc(i.q)}&times;</span><span>${esc(i.n)}</span>${
+          i.v?`<em>${esc(i.v)}</em>`:''}</div>`).join('')}</div>
+      <div class="tk-tot"><span>Collect at the register</span><b>${money(o.total)}</b></div>
+      ${o.rewardStatus === 'requested' ? `<div class="tk-rw"><b>Reward requested</b>
+        ${esc(o.rewardLabel||'')} &mdash; check it on the Rewards tab before you ring it up</div>` : ''}
+      <div class="tk-foot">${o.status === 'ready'
+        ? `<button class="btn go" data-done="${esc(o.code)}">Picked up, clear it</button>`
+        : `<button class="btn" data-ready="${esc(o.code)}">Mark ready</button>`}</div>
+    </div>`).join('') +
+    `<p class="note">Mark a ticket ready and the customer's own order screen says so
+      within a few seconds. This board is reading the shop's database, not this browser.</p>`;
+}
+
+document.addEventListener('click', async e => {
+  const rdy = e.target.closest('[data-ready]');
+  const dn  = e.target.closest('[data-done]');
+  if(!rdy && !dn) return;
+  const code = (rdy || dn).dataset.ready || (rdy || dn).dataset.done;
+  const to = rdy ? 'ready' : 'collected';
+  (rdy || dn).disabled = true;
+  const r = await api('/staff/orders/' + encodeURIComponent(code) + '/status',
+    {method:'POST', body: JSON.stringify({status: to})});
+  if(r && r.ok){ toast(rdy ? 'Marked ready' : 'Cleared'); pullBoard(); }
+  else { toast(why(r, 'Could not update that ticket.')); (rdy||dn).disabled = false; }
+});
+
+/* ---- rewards: the fifty-times-a-day screen ---- */
+let RW = {code:'', msg:'', member:null, prog:null, busy:false};
+
+function viewRewards(){
+  const m = RW.member, p = RW.prog;
+  return `
+    <div class="card">
+      <div class="eyebrow">Add a visit</div>
+      <p class="note" style="margin:0 0 10px">Type the code on the customer's screen,
+        then add the visit when you take their money.</p>
+      <div class="row">
+        <input id="rwCode" value="${esc(RW.code)}" placeholder="SP00000" maxlength="7"
+          autocomplete="off" autocapitalize="characters" spellcheck="false" style="flex:2">
+        <button class="btn" id="rwFind" style="flex:1" ${RW.busy?'disabled':''}>${
+          RW.busy?'…':'Look up'}</button>
+      </div>
+      ${RW.msg ? `<div class="warn" role="alert" style="margin-top:10px">${esc(RW.msg)}</div>` : ''}
+      ${m ? `<div class="hit">
+        <h3>${esc(m.first || 'Member')}</h3>
+        <div class="sub">${esc(m.code)} &middot; ${p.visits} of ${p.need} visits
+          &middot; ${p.total} all time</div>
+        <div class="dots">${Array.from({length:p.need}).map((_,i)=>
+          `<i class="${i<p.visits?'on':''}"></i>`).join('')}</div>
+        ${p.ready ? `<div class="ready">${p.ready>1?p.ready+' rewards':'A reward'} ready
+          &middot; ${esc((RULE&&RULE.reward)||'')}</div>` : ''}
+        <button class="btn" id="rwAdd">Add a visit</button>
+        ${p.ready ? `<button class="btn ghost" id="rwUse" style="margin-top:8px">Reward used, take it off</button>` : ''}
+      </div>` : ''}
+    </div>
+    <p class="note">Only this screen can add a visit. Nothing a customer presses on
+      their own phone can, which is what makes the count worth anything.</p>`;
+}
+
+function wireRewards(){
+  const find = async () => {
+    RW.code = (($('#rwCode')||{}).value || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    RW.member = null; RW.prog = null;
+    if(RW.code.length < 3){ RW.msg = "Type the code from the customer's card."; return render() }
+    RW.msg = ''; RW.busy = true; render();
+    const r = await api('/staff/members?code=' + encodeURIComponent(RW.code));
+    RW.busy = false;
+    if(r && r.ok){ RW.member = r.body.member; RW.prog = r.body.progress; RW.msg = ''; }
+    else RW.msg = why(r, 'No member with that code.');
+    render();
+    const el = $('#rwCode'); if(el && !RW.member) el.select();
+  };
+  const f = $('#rwFind'); if(f) f.onclick = find;
+  const i = $('#rwCode');
+  if(i){ i.onkeydown = e => { if(e.key === 'Enter') find() }; if(!RW.member) i.focus(); }
+
+  const a = $('#rwAdd');
+  if(a) a.onclick = async () => {
+    a.disabled = true;
+    const r = await api('/staff/members/' + encodeURIComponent(RW.member.code) + '/visit',
+      {method:'POST', body: JSON.stringify({})});
+    if(r && r.ok){
+      RW.member = r.body.member; RW.prog = r.body.progress; RW.msg = '';
+      const p = RW.prog;
+      render();
+      toast(p.ready ? 'Visit added. A reward is ready.'
+                    : 'Visit added. ' + (p.need - p.visits) + ' to go.');
+      return;
+    }
+    /* A second tap inside half a minute is a thumb, not a sale. Said out
+       loud rather than swallowed, because the alternative is somebody
+       pressing it again. */
+    RW.msg = why(r, 'Could not add that visit.');
+    render();
+    if(r && r.status === 409) toast(RW.msg);
+  };
+
+  const u = $('#rwUse');
+  if(u) u.onclick = async () => {
+    u.disabled = true;
+    const r = await api('/staff/members/' + encodeURIComponent(RW.member.code) + '/redeem',
+      {method:'POST', body: JSON.stringify({})});
+    if(r && r.ok){
+      RW.member = r.body.member; RW.prog = r.body.progress; RW.msg = '';
+      render(); toast('Reward taken off. Ring the rest as normal.');
+      return;
+    }
+    RW.msg = why(r, 'Could not take that reward off.');
+    render();
+  };
+}
+
+/* ---- customers: the real list ----
+   The old Staff view had six hardcoded sample people here. */
+let PEOPLE = null, PQ = '';
+
+async function drawPeople(){
+  $('#view').innerHTML = '<div class="empty"><b>Reading the shop…</b></div>';
+  const r = await api('/staff/members/list?limit=200&q=' + encodeURIComponent(PQ));
+  if(!r || !r.ok){ $('#view').innerHTML = `<div class="empty"><b>Could not reach the shop</b>
+    <p>${esc(why(r))}</p></div>`; return }
+  PEOPLE = r.body.members;
+
+  $('#view').innerHTML = `
+    <div class="card">
+      <input id="pq" type="search" value="${esc(PQ)}" placeholder="Name, code, number or email">
+      <div class="note">${r.body.total} member${r.body.total===1?'':'s'}${
+        PQ ? ' &middot; showing ' + PEOPLE.length + ' match' + (PEOPLE.length===1?'':'es') : ''}</div>
+    </div>
+    ${PEOPLE.length ? PEOPLE.map(m=>`
+      <div class="lrow mem">
+        <div class="th">${esc((m.first||'?').slice(0,1).toUpperCase())}</div>
+        <div class="t">
+          <b>${esc(m.first)} ${m.ready ? '&middot; <span style="color:var(--go-ink)">reward ready</span>' : ''}</b>
+          <small>${esc(m.code)} &middot; ${m.visits} of ${m.need}
+            &middot; ${m.total} all time${m.lastVisit ? ' &middot; last visit ' + agoPhrase(m.lastVisit) : ''}</small>
+        </div>
+        <button class="mini" data-look="${esc(m.code)}">Open</button>
+      </div>`).join('')
+      : `<div class="empty"><b>Nobody yet</b><p>Members appear here the moment
+         somebody joins on their phone.</p></div>`}
+    <a class="btn ghost" href="${API}/staff/members/export.csv" download
+       style="margin-top:12px">Download the member list</a>
+    <a class="btn ghost" href="${API}/staff/subscribers/export.csv" download
+       style="margin-top:8px">Download the deal alerts list</a>
+    <p class="note">This is the shop's list. It downloads in full, any time,
+      and it is yours.</p>`;
+
+  const q = $('#pq');
+  if(q) q.oninput = e => { PQ = e.target.value; clearTimeout(q._t);
+    q._t = setTimeout(drawPeople, 260) };
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-look]'); if(!b) return;
+  RW.code = b.dataset.look; RW.member = null; RW.prog = null; RW.msg = '';
+  TAB = 'rewards'; drawTabs(); render();
+  const f = $('#rwFind'); if(f) f.click();
+});
+
+/* ---- menu ---- */
+let MENU = null, MQ = '';
+
+async function drawMenu(){
+  $('#view').innerHTML = '<div class="empty"><b>Reading the shelf…</b></div>';
+  const r = await api('/staff/catalog?q=' + encodeURIComponent(MQ));
+  if(!r || !r.ok){ $('#view').innerHTML = `<div class="empty"><b>Could not reach the shop</b>
+    <p>${esc(why(r))}</p></div>`; return }
+  MENU = r.body.items;
+
+  if(!MENU.length && !MQ){
+    $('#view').innerHTML = `<div class="empty"><b>The shelf is empty here</b>
+      <p>The shop's products have not been loaded into the service yet.
+         Import the inventory spreadsheet, or add products one at a time.</p>
+      <button class="btn" data-new="1" style="max-width:260px;margin:14px auto 0">+ Add a product</button></div>`;
+    return;
+  }
+
+  $('#view').innerHTML = `
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" data-new="1">+ Add a product</button>
+      </div>
+      <input id="mq" type="search" value="${esc(MQ)}" placeholder="Find a product">
+      <div class="note">${r.body.total} on the shelf
+        &middot; ${MENU.filter(p=>p.hidden).length} hidden</div>
+    </div>
+    ${MENU.slice(0,200).map(p=>`
+      <div class="lrow prod ${p.hidden?'off':''}">
+        <div class="th">${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy">` : 'no photo'}</div>
+        <div class="t">
+          <b>${esc(p.name || '(no name)')}</b>
+          <small><span class="pr">${p.price == null ? 'no price' : money(p.price)}</span>${
+            p.brand ? ' &middot; ' + esc(p.brand) : ''}${p.hidden?' &middot; hidden':''}${
+            p.custom?' &middot; added by the shop':''}</small>
+        </div>
+        <button class="mini" data-edit="${esc(p.id)}">Edit</button>
+      </div>`).join('')}
+    ${MENU.length > 200 ? '<p class="note">Showing the first 200. Search to narrow it.</p>' : ''}`;
+
+  const q = $('#mq');
+  if(q) q.oninput = e => { MQ = e.target.value; clearTimeout(q._t);
+    q._t = setTimeout(drawMenu, 280) };
+}
+
+function editSheet(p){
+  const isNew = !p;
+  p = p || {id:'', name:'', brand:'', price:'', cat:'', photo:'', hidden:false};
+  sheet(`
+    <h3>${isNew ? 'Add a product' : 'Edit product'}</h3>
+    <label class="f"><span>Name</span><input id="eName" value="${esc(p.name)}"></label>
+    <label class="f"><span>Brand</span><input id="eBrand" value="${esc(p.brand)}"></label>
+    <div class="row">
+      <label class="f"><span>Price</span>
+        <input id="ePrice" inputmode="decimal" value="${p.price === null ? '' : esc(p.price)}"></label>
+      <label class="f"><span>Shelf</span><input id="eCat" value="${esc(p.cat)}"></label>
+    </div>
+    <label class="f"><span>Photograph</span>
+      <div class="lrow" style="margin:0">
+        <div class="th" id="ePrev">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : 'none'}</div>
+        <div class="t"><small id="ePhotoName">${p.photo ? esc(p.photo) : 'No photograph yet'}</small></div>
+        <button class="mini" id="ePick">Choose</button>
+      </div>
+      <input type="file" id="eFile" accept="image/*" class="hide">
+    </label>
+    <p class="note" style="margin-bottom:12px">A product with no photograph shows a
+      labelled gap, never a stand-in picture. Nothing here is ever drawn or generated.</p>
+    <div id="eMsg"></div>
+    <button class="btn" id="eSave">${isNew ? 'Add it' : 'Save'}</button>
+    ${isNew ? '' : `<button class="btn ghost" id="eHide" style="margin-top:8px">${
+      p.hidden ? 'Put it back on the menu' : 'Hide it from the menu'}</button>`}
+    <button class="btn ghost" id="eCancel" style="margin-top:8px">Cancel</button>`);
+
+  let photo = p.photo || '';
+  $('#eCancel').onclick = closeSheet;
+  $('#ePick').onclick = () => $('#eFile').click();
+
+  $('#eFile').onchange = async ev => {
+    const f = ev.target.files && ev.target.files[0]; if(!f) return;
+    $('#ePhotoName').textContent = 'Uploading…';
+    const r = await fetch(API + '/staff/media', {
+      method:'POST', credentials:'same-origin',
+      headers:{'content-type': f.type || 'application/octet-stream'},
+      body: f
+    }).then(async res => {
+      const ct = (res.headers.get('content-type')||'').toLowerCase();
+      if(ct.indexOf('json') < 0) return null;
+      return {ok: res.ok, status: res.status, body: await res.json()};
+    }).catch(()=>null);
+
+    if(r && r.ok && r.body.path){
+      photo = r.body.path;
+      $('#ePrev').innerHTML = `<img src="${esc(photo)}" alt="">`;
+      $('#ePhotoName').textContent = photo;
+    }else{
+      $('#ePhotoName').textContent = 'Not uploaded';
+      $('#eMsg').innerHTML = `<div class="warn">${esc(why(r, 'That picture was not stored.'))}</div>`;
+    }
+  };
+
+  $('#eSave').onclick = async () => {
+    const name = ($('#eName').value || '').trim();
+    const priceRaw = ($('#ePrice').value || '').trim();
+    const price = priceRaw === '' ? null : Number(priceRaw.replace(/[^0-9.]/g, ''));
+    if(!name){ $('#eMsg').innerHTML = '<div class="warn">A product needs a name.</div>'; return }
+    if(price === null || !isFinite(price)){
+      /* A product with no price becomes a product priced at nothing. The
+         register is the final word, but the screen is what the customer read
+         before they walked in. */
+      $('#eMsg').innerHTML = '<div class="warn">A price the register could ring.</div>'; return;
+    }
+    const patch = {name, brand: ($('#eBrand').value||'').trim(),
+                   cat: ($('#eCat').value||'').trim(), price, hidden: !!p.hidden};
+    if(photo) patch.photo = photo;
+
+    const id = p.id || ('shop-' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40)
+                        + '-' + Date.now().toString(36).slice(-4));
+    const payload = isNew
+      ? {custom: [Object.assign({id}, patch)]}
+      : (p.custom ? {custom: [Object.assign({id}, patch)]} : {edits: {[id]: patch}});
+
+    $('#eSave').disabled = true;
+    const r = await api('/staff/catalog/overrides', {method:'POST', body: JSON.stringify(payload)});
+    if(r && r.ok){ closeSheet(); toast(isNew ? 'Added. It is on the menu now.'
+      : 'Saved. Every phone picks it up on its next open.'); drawMenu(); return }
+    $('#eSave').disabled = false;
+    $('#eMsg').innerHTML = `<div class="warn">${esc(why(r, 'That was not saved.'))}</div>`;
+  };
+
+  const h = $('#eHide');
+  if(h) h.onclick = async () => {
+    const patch = {name: p.name, brand: p.brand, cat: p.cat,
+                   price: p.price, hidden: !p.hidden};
+    if(p.photo) patch.photo = p.photo;
+    const payload = p.custom ? {custom: [Object.assign({id: p.id}, patch)]}
+                             : {edits: {[p.id]: patch}};
+    const r = await api('/staff/catalog/overrides', {method:'POST', body: JSON.stringify(payload)});
+    if(r && r.ok){ closeSheet(); toast(p.hidden ? 'Back on the menu' : 'Hidden from the menu');
+      drawMenu(); return }
+    toast(why(r, 'That was not saved.'));
+  };
+}
+
+document.addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]');
+  if(ed){ editSheet((MENU||[]).find(x=>x.id === ed.dataset.edit)); return }
+  if(e.target.closest('[data-new]')) editSheet(null);
+});
+
+/* ---- the rule ---- */
+function viewRule(){
+  const R = RULE || {};
+  return `
+    <div class="card">
+      <div class="eyebrow">The rule</div>
+      <p class="note" style="margin:0 0 12px">Change any of this and every customer's
+        screen changes with it on their next open. Nothing here is fixed.</p>
+      <label class="f"><span>Programme name</span>
+        <input id="sName" value="${esc(R.name||'')}"></label>
+      <div class="row">
+        <label class="f"><span>Visits to earn a reward</span>
+          <input id="sN" inputmode="numeric" maxlength="3" value="${esc(R.visitsFor||'')}"></label>
+        <label class="f"><span>What they get</span>
+          <input id="sGift" value="${esc(R.reward||'')}"></label>
+      </div>
+      <label class="f"><span>Birthday line</span>
+        <input id="sPerk" value="${esc(R.perk||'')}"></label>
+      <label class="f"><span>Where new members are sent</span>
+        <input id="sEnd" value="${esc(R.endpoint||'')}" placeholder="https://… your CRM webhook"
+          autocomplete="off" spellcheck="false" inputmode="url"></label>
+      <p class="note" style="margin:0 0 12px">Every join arrives there as a contact with
+        their name, email and birthday. Leave it empty and joins stay in the shop's own
+        list only.</p>
+      <div id="sMsg"></div>
+      <button class="btn" id="sSave">Save the rule</button>
+      <button class="btn ghost" id="sOff" style="margin-top:8px">${
+        R.on ? 'Switch the programme off' : 'Switch the programme on'}</button>
+    </div>
+    <div class="card">
+      <div class="eyebrow">This register</div>
+      <p class="note" style="margin:0">Signed in on this device for the trading day.
+        The PIN is checked by the shop's service, not by this page &mdash; a PIN compared
+        in the browser is a decoration, because anyone can read this file.</p>
+    </div>`;
+}
+
+function wireRule(){
+  $('#sSave').onclick = async () => {
+    const n = parseInt($('#sN').value, 10);
+    const rule = {
+      name: ($('#sName').value||'').trim(),
+      visitsFor: n,
+      reward: ($('#sGift').value||'').trim(),
+      perk: ($('#sPerk').value||'').trim(),
+      endpoint: ($('#sEnd').value||'').trim()
+    };
+    $('#sSave').disabled = true;
+    const r = await api('/staff/config', {method:'POST', body: JSON.stringify({rewards: rule})});
+    $('#sSave').disabled = false;
+    if(r && r.ok){ RULE = r.body.rewards; toast('Saved. Every phone picks it up on its next open.');
+      render(); return }
+    $('#sMsg').innerHTML = `<div class="warn">${esc(why(r, 'That was not saved.'))}</div>`;
+  };
+  $('#sOff').onclick = async () => {
+    const r = await api('/staff/config', {method:'POST',
+      body: JSON.stringify({rewards: {on: !(RULE && RULE.on)}})});
+    if(r && r.ok){ RULE = r.body.rewards;
+      toast(RULE.on ? 'Programme switched on' : 'Programme switched off'); render(); return }
+    toast(why(r, 'That was not saved.'));
+  };
+}
+
+/* A register that has been asleep in somebody's pocket should catch up the
+   moment it is looked at, rather than on the next poll tick. */
+document.addEventListener('visibilitychange', () => { if(!document.hidden && POLL) pullBoard() });
+</script>
+</body>
+</html>

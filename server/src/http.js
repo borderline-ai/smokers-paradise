@@ -93,3 +93,15 @@ export const callerIp = request =>
   request.headers.get('cf-connecting-ip') ||
   request.headers.get('x-forwarded-for') ||
   'unknown';
+
+/* An address the shop could actually send to. Deliberately loose: the only
+   way to truly validate an email address is to send to it, and a regex that
+   tries to be clever rejects real addresses people actually have. This catches
+   the typo and the empty box and gets out of the way. */
+export function email(v, max = 160) {
+  const e = str(v, max).toLowerCase();
+  if (!e) return '';
+  if (e.length < 6 || e.length > max) return '';
+  if (!/^[^\s@,;]+@[^\s@,;.]+(\.[^\s@,;.]+)+$/.test(e)) return '';
+  return e;
+}

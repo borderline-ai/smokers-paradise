@@ -36,6 +36,20 @@ mkdirSync(outDir, { recursive: true });
 copyFileSync(src, out);
 console.log('app/index.html -> server/public/index.html  (%s MiB)', (s.size / MiB).toFixed(1));
 
+/* THE COUNTER. A separate app since the counter split: 36 KB and no
+   photographs, because the register screen was loading the entire customer
+   app — every product picture included — to show a lookup box and a ticket
+   list, fifty times a day, on whatever phone the person behind the till
+   happens to own. */
+const counterSrc = join(here, '..', '..', 'app', 'counter.html');
+if (!existsSync(counterSrc)) {
+  console.error('No app/counter.html. The register screen would 404.');
+  process.exit(1);
+}
+copyFileSync(counterSrc, join(outDir, 'counter.html'));
+console.log('app/counter.html -> server/public/counter.html  (%s KiB)',
+  (statSync(counterSrc).size / 1024).toFixed(0));
+
 /* THE PHOTOGRAPHS. Since stage 172 they are files rather than 7 MB of base64
    inside the document. Named by the hash of their own bytes, so they are
    served immutable and a replaced photograph arrives under a new name instead

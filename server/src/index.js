@@ -25,6 +25,8 @@ import { readConfig, writeConfig, cleanRewards, DEFAULT_REWARDS, DEFAULT_PRICING
 import * as M from './members.js';
 import * as O from './orders.js';
 import * as C from './catalog.js';
+import * as Sub from './subscribers.js';
+import * as Media from './media.js';
 import * as Out from './outbound.js';
 
 const API = '/api';
@@ -101,6 +103,12 @@ async function handleApi(request, env, ctx, url, shop) {
     /* A whole shop's inventory is a bigger thing than a join, and it arrives
        as one POST. Everything else stays on the small limit, because a 2 MB
        ceiling on /orders would only ever be used by somebody abusing it. */
+    /* A photograph is not JSON. Its route reads the body itself. */
+    if (path === '/staff/media') {
+      const guard = await requireSession(request, env, shop);
+      if (guard instanceof Response) return guard;
+      return Media.upload(request, env);
+    }
     const big = path.startsWith('/staff/catalog/');
     body = await readJson(request, big ? 4 * 1024 * 1024 : 256 * 1024);
     if (body === null) {
@@ -136,8 +144,14 @@ async function handleApi(request, env, ctx, url, shop) {
     if (seg[1] === 'members' && seg.length === 2 && method === 'GET') {
       return M.lookup(env, shop, url.searchParams, rule);
     }
+    if (seg[1] === 'members' && seg[2] === 'list' && method === 'GET') {
+      return M.list(env, shop, url.searchParams, rule);
+    }
     if (seg[1] === 'members' && seg[2] === 'export.csv' && method === 'GET') {
       return M.exportCsv(env, shop, rule);
+    }
+    if (seg[1] === 'subscribers' && seg[2] === 'export.csv' && method === 'GET') {
+      return Sub.exportCsv(env, shop);
     }
     if (seg[1] === 'members' && seg[3] === 'visit' && method === 'POST') {
       return M.addVisit(env, shop, seg[2], sid, rule, { force: !!body.force });
@@ -158,6 +172,9 @@ async function handleApi(request, env, ctx, url, shop) {
     }
 
     /* the shelf */
+    if (seg[1] === 'catalog' && seg.length === 2 && method === 'GET') {
+      return Media.editorCatalog(env, shop, url.searchParams);
+    }
     if (seg[1] === 'catalog' && seg[2] === 'seed' && method === 'POST') {
       return C.seed(env, shop, body);
     }
@@ -210,9 +227,15 @@ async function handleApi(request, env, ctx, url, shop) {
     /* Forward the join to the shop's CRM if they have one, without making the
        customer wait for somebody else's webhook to answer. */
     if (res.status === 200 && rule.endpoint) {
+      /* The flat shape a GoHighLevel inbound webhook was set up for, plus the
+         address and what was consented to. `sms` is kept and kept false-able:
+         the shop is not doing SMS, and a CRM that receives sms:true will
+         eventually act on it. */
       const payload = {
         first: str(body.first, 60), phone: str(body.phone, 20).replace(/\D/g, ''),
-        birthday: str(body.birthday, 8), sms: !!body.sms,
+        email: str(body.email, 160).toLowerCase(),
+        birthday: str(body.birthday, 8),
+        sms: !!body.sms, emailOk: !!body.emailOk, terms: str(body.terms, 400),
         code: str(body.code, 12), joined: str(body.joined, 40) || nowIso(), shop
       };
       ctx.waitUntil(
@@ -227,6 +250,26 @@ async function handleApi(request, env, ctx, url, shop) {
   }
   if (path === '/members/me/leave' && method === 'POST') {
     return M.leave(env, shop, body.token);
+  }
+
+  /* the deal-alerts list, which is not a membership */
+  if (path === '/subscribers' && method === 'POST') {
+    const res = await Sub.subscribe(env, shop, body);
+    if (res.status === 200) {
+      const { rule } = await shopState(env, shop);
+      if (rule.endpoint) {
+        ctx.waitUntil(Out.enqueue(env, shop, rule.endpoint, {
+          email: str(body.email, 160).toLowerCase(),
+          source: str(body.source, 40) || 'deal-alerts',
+          terms: str(body.terms, 400),
+          joined: nowIso(), shop
+        }).then(() => Out.drain(env, 5)));
+      }
+    }
+    return res;
+  }
+  if (path === '/subscribers/leave' && method === 'POST') {
+    return Sub.unsubscribe(env, shop, body);
   }
 
   /* orders */
@@ -267,10 +310,25 @@ export default {
       }
     }
 
-    /* The counter has its own address. The URL reveals nothing on its own:
-       the PIN pad still stands in front of it and the PIN is checked here. */
+    /* THE COUNTER IS A DIFFERENT APP.
+
+       It used to be the customer app with a flag injected, which meant the
+       register screen downloaded 1.9 MB of document and 309 photographs to
+       show a lookup box and a ticket list. It is 36 KB now and it ships none
+       of the customer-facing code — so what a customer can fetch no longer
+       includes the menu editor, the member list screen or the till.
+
+       The URL still reveals nothing on its own: the PIN pad stands in front
+       of it and the PIN is checked here, not in the browser. */
     if (url.pathname === '/counter' || url.pathname === '/counter/') {
-      return serveApp(request, env, true);
+      const u = new URL(request.url);
+      u.pathname = '/counter.html';
+      const res = await env.ASSETS.fetch(new Request(u.toString(), { method: 'GET' }));
+      if (!res.ok) return res;
+      const h = new Headers(res.headers);
+      h.set('cache-control', 'no-store');
+      h.set('x-robots-tag', 'noindex, nofollow');
+      return new Response(res.body, { status: res.status, headers: h });
     }
 
     if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -281,6 +339,14 @@ export default {
        app. An unknown path falls back to the app itself, because this is a
        single-page app and a deep link is not a missing file. */
     const asset = await env.ASSETS.fetch(request);
+    if (asset.status === 404 && url.pathname.startsWith('/img/')) {
+      /* Shipped pictures win; an uploaded one is looked for only when stages/
+         did not ship that name. Which cannot collide anyway — the name is the
+         hash of the bytes. */
+      const up = await Media.serve(env, url.pathname);
+      if (up) return up;
+      return fail(404, 'no image', 'There is no picture at that name.');
+    }
     if (asset.status === 404) return serveApp(request, env, false);
 
     /* Photographs are named by the hash of their own bytes, so a given name

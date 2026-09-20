@@ -21,7 +21,13 @@ export const DEFAULT_REWARDS = {
   name: 'Paradise Rewards',
   visitsFor: 10,
   reward: '$10 off',
-  perk: 'A birthday text with something on us, every year.',
+  /* EMAIL, NOT A TEXT. This is the value the app's card actually prints:
+     Shop.pullConfig() copies `perk` over whatever the document shipped with,
+     so the server's default wins. Stage 174 changed the wording in the app and
+     missed it here, and the false "birthday text" claim came straight back on
+     the hosted shop while the offline file read correctly. Found by opening
+     it, not by a test — there is one now. */
+  perk: 'A birthday email with something on us, every year.',
   endpoint: '',
   terms: 'One membership per phone number. Visits are added at the counter when you pay. 21+ only. The register is the final word on any discount.'
 };

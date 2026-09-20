@@ -118,12 +118,125 @@ Two refusals in there are load-bearing and should not be softened:
 `--retire` hides the starter products the file does not mention. Hides, not
 deletes, so importing the wrong file at four in the afternoon is recoverable.
 
+## EMAIL IS THE CHANNEL. SMS IS NOT, AND WILL NOT BE (stage 174)
+
+**Do not reintroduce SMS without reading this.** It is a decision, not an
+omission.
+
+US application-to-person messaging is filtered by carriers on content, under
+the heading SHAFT: Sex, Hate, Alcohol, Firearms, **Tobacco**. A smoke shop is
+the T. Registration for a vape retailer is uncertain, and even an approved
+campaign has promotional messages dropped when the body names a product —
+silently, which is the worst failure available. Every deal, reward and birthday
+note would be a fight over phrasing that the shop loses without being told.
+
+Email has no such fight. The legal regime is CAN-SPAM rather than TCPA:
+accurate sender, a physical address in the message, an unsubscribe that is
+honoured. The shop's address is already in `STORE`.
+
+The same restriction is why this app is a PWA. Both app stores prohibit apps
+facilitating the sale of tobacco and vape products, so the home-screen install
+is not a shortcut — it is the only distribution channel this business has.
+
+And the same rule applies to picking a provider: **ask, do not omit.** A
+smoke shop is a lawful business, and providers who serve regulated verticals
+will approve it in writing. An account obtained by not mentioning the industry
+is a channel that works until it doesn't, and for an agency a terminated
+provider account takes every other client down with it.
+
+### Four things the app used to claim and could not do
+
+Stage 174 deleted all four. If any of them come back, they are lies:
+
+| It said | What was true |
+| --- | --- |
+| "Mark ready, text them" | no text was sent |
+| "Ready · customer notified" | nobody was notified |
+| "we'll text you when the bag is ready" | no |
+| **"You are on the list. One text when a real deal lands."** | **there was no list** |
+
+The last one is the bad one, and it is worse than doing nothing. The front page
+box took a phone number, wrote it to that browser's `localStorage`, and said
+that sentence. A form that silently discards what it is given makes a customer
+believe they have done something and stop looking for the real way in. It has a
+`subscribers` table behind it now, and an unsubscribe that needs no account.
+
+Two switches in Account were the same kind of decoration — they flipped a flag
+nothing ever read. **Order alerts** now gates the toast the app genuinely
+raises when the status poll sees a bag marked ready.
+
+What IS true about an order, and is what the words say now: the customer's own
+screen follows the counter within about five seconds while the app is open.
+
+### The consent sentence travels with the consent
+
+`MB_TERMS` is one constant, put on the form and sent with the join, and stored
+in `members.contact_terms` and on the CSV export. "They opted in" is not an
+answer to a complaint; what they opted in **to** is.
+
+## THE COUNTER IS A SEPARATE APP NOW
+
+`app/counter.html`, 36 KB, served at `/counter`. It replaced "the customer app
+with `window.SP_STAFF` injected", which meant the register screen downloaded
+1.9 MB of document and 309 photographs to show a lookup box and a ticket list —
+fifty times a day, on whatever phone the person behind the till owns.
+
+**It is written by hand, not by a stage script.** That convention exists because
+`app/index.html` is 12 MB of generated output that must never be hand-edited.
+`counter.html` is a source file. Edit it directly.
+
+**It owns nothing.** No `localStorage` anywhere in it, and that is deliberate:
+the customer app keeps a local cache because it has to work in a dead spot, but
+a till that guesses is worse than a till that says it cannot reach the shop. If
+the service is down it says so and refuses.
+
+**It contains no sample screens.** The old Staff view carried an AI phone tab of
+invented call logs, a text blast tab with nothing behind it, and six customers
+who did not exist. None came across. Carrying a fake screen into the thing an
+owner uses every day is how they stop believing the real ones. There is a test
+asserting the tab list is exactly `Orders, Rewards, Menu, Customers, Settings`.
+
+Three endpoints exist for it and nothing else: `GET /api/staff/catalog` (the
+shelf including what is hidden, because hiding is what the owner came to undo),
+`GET /api/staff/members/list`, and `POST /api/staff/media`.
+
+### Photographs from the counter, at last
+
+`POST /api/staff/media` takes raw bytes and answers `img/<hash>.webp` — the same
+naming as stage 172, so an uploaded picture and a shipped one mean the same
+thing. R2 in production, `server/media/` under `npm run serve`. The Worker tries
+the shipped assets first and the bucket second.
+
+**The type is read from the bytes, not the header.** A content-type is a claim
+by whoever is uploading, and a shop's product page is not where you find out it
+was wrong.
+
+### The old Staff view is still inside index.html
+
+Stripping it is the obvious follow-up and it has a real cost: `STAFF_DOOR` puts
+that view behind the PIN on `file://`, which is how the offline walkthrough
+demos the counter with no server. Removing it makes the customer app smaller and
+stops shipping counter code to shoppers; it also ends the offline staff demo.
+Decide before doing it.
+
 ### What is still not done
 
 - **The app still ships the starter catalogue inline.** `PRODUCTS` is built
   from `BASE_PRODUCTS` in the document and then merged with what the server
   sends. Making the server the only source is the next stage, and it is only
   worth doing once the owner's real list is actually in.
+- **Web push is the next stage.** It is how an order-ready alert reaches a
+  closed app, and it needs no carrier's permission at all — it goes through
+  Apple's and Google's push services, not the phone network, so SHAFT does not
+  apply. iOS has supported it since 16.4, but only once the app is on the home
+  screen, which makes the install prompt worth building at the same time.
+  Right now there is none: Android users get Chrome's ignorable infobar and
+  iOS users get nothing.
+- **Nothing sends email yet.** The join and the deal-alerts signup both reach
+  the shop and both forward to the CRM webhook, which is where GoHighLevel
+  picks them up. The service itself has no sender. Check the ESP's acceptable
+  use policy covers vape retail before building one — several mainstream ones
+  do not, and the failure mode is an account closed with the list inside it.
 - **There is no photo upload from the counter.** The bulk photo import still
   writes base64 into one device's localStorage, where it is stranded. The
   service now accepts a photo *path*, so the missing piece is somewhere to PUT
@@ -185,7 +298,7 @@ a person would actually see.
 The ones to run after any change:
 
 ```
-python3 test/member.py       23 checks   the customer's half of rewards
+python3 test/member.py       28 checks   the customer's half of rewards
 python3 test/counter.py      23 checks   the counter's half
 python3 test/askprompt.py    11 checks   the join prompt
 python3 test/hittest.py                  every control reachable by a finger
@@ -199,8 +312,8 @@ python3 test/tablet/journey_ipad.py      29 checks, the iPad walkthrough
 And, since stage 171, the two that cover the backend:
 
 ```
-cd server && npm test                    58 checks, the service, offline
-python3 test/live_backend.py             29 checks, two real browsers, real service
+cd server && npm test                    81 checks, the service, offline
+python3 test/live_backend.py             40 checks, two real browsers, real service
 ```
 
 `npm test` needs nothing installed — Node 24 ships `node:sqlite` and D1 is
@@ -285,7 +398,9 @@ version on their sign.
 ## Layout
 
 ```
-app/index.html        the whole app, the build output (1.9 MB since stage 172)
+app/index.html        the customer app, the build output (1.9 MB since stage 172)
+app/counter.html      the register. A hand-written source file, 36 KB, no photos.
+                      Served at /counter. Not produced by a stage.
 app/img/              309 photographs, named by the hash of their own bytes.
                       Referenced as `img/<hash>.webp` — relative, no slash.
 stages/sNNN_*.py      the numbered edits that produced it, in order
@@ -301,8 +416,8 @@ docs/                 the Holy Cow source this was converted from, and its check
 ## Working on it
 
 ```bash
-cp app/index.html app/index.before174.html      # always
-python3 stages/s174_whatever.py
+cp app/index.html app/index.before175.html      # always
+python3 stages/s175_whatever.py
 python3 test/member.py && python3 test/counter.py
 ```
 

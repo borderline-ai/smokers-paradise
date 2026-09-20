@@ -39,10 +39,15 @@ async def main():
             const v = document.querySelector('#v-rewards');
             return {txt: v.innerText,
                     form: !!document.getElementById('mbGo'),
-                    fields: ['mbFirst','mbPhone','mbMon','mbDay','mbSms'].filter(i=>document.getElementById(i)),
+                    fields: ['mbFirst','mbPhone','mbEmail','mbMon','mbDay','mbSms'].filter(i=>document.getElementById(i)),
                     disconnected: /counter/i.test(v.innerText) && !document.getElementById('mbGo')} }""")
         check('Rewards offers a join form instead of a dead end', r['form'], r['txt'][:220])
-        check('all four things are asked for', len(r['fields']) == 5, r['fields'])
+        # Five things since stage 174. The address is the channel — SMS to a
+        # smoke shop's customers means fighting carrier content rules over the
+        # phrasing of every promotion — and the number stays because it is the
+        # identity: the member code is derived from it and the counter finds
+        # people by it.
+        check('all five things are asked for', len(r['fields']) == 6, r['fields'])
         check('the rule is stated before the form', 'Paradise Rewards' in r['txt'] and '$10 off' in r['txt'], r['txt'][:220])
         # not a text search: "every year" appears in the perk line. The test is
         # that no control on the form can take a year of birth.
@@ -55,20 +60,28 @@ async def main():
         # ---- it refuses a join it cannot use --------------------------------
         r = await pg.evaluate("""async () => {
             const out = {};
-            const fill = async (f, p, tick) => {
+            const fill = async (f, p, e, tick) => {
                 document.getElementById('mbFirst').value = f;
                 document.getElementById('mbPhone').value = p;
+                document.getElementById('mbEmail').value = e;
                 document.getElementById('mbSms').checked = tick;
                 document.getElementById('mbGo').click();
                 await new Promise(r=>setTimeout(r,350));
                 return {joined: !!localStorage.getItem('sp_member_v1'),
                         warn: (document.querySelector('#v-rewards .ckwarn')||{}).innerText || ''} };
-            out.noname  = await fill('', '5205550134', true);
-            out.shortno = await fill('Marco', '520555', true);
-            out.noconsent = await fill('Marco', '5205550134', false);
+            out.noname  = await fill('', '5205550134', 'a@b.com', true);
+            out.shortno = await fill('Marco', '520555', 'a@b.com', true);
+            out.noemail = await fill('Marco', '5205550134', '', true);
+            out.bademail = await fill('Marco', '5205550134', 'marco@', true);
+            out.noconsent = await fill('Marco', '5205550134', 'a@b.com', false);
             return out }""")
         for k, label in [('noname', 'a join with no name'),
                          ('shortno', 'a join with half a phone number'),
+                         # An address that cannot be sent to is a member the
+                         # shop can never reach again, and email is now the
+                         # only channel there is.
+                         ('noemail', 'a join with no email'),
+                         ('bademail', 'a join with half an email'),
                          ('noconsent', 'a join with the consent box unticked')]:
             check('%s is refused, and said so' % label,
                   (not r[k]['joined']) and len(r[k]['warn']) > 8, r[k])
@@ -77,6 +90,7 @@ async def main():
         r = await pg.evaluate("""async () => {
             document.getElementById('mbFirst').value = 'Marco';
             document.getElementById('mbPhone').value = '(520) 555-0134';
+            document.getElementById('mbEmail').value = 'Marco@Example.COM';
             document.getElementById('mbMon').value = '4';
             document.getElementById('mbDay').value = '14';
             document.getElementById('mbSms').checked = true;
@@ -94,8 +108,18 @@ async def main():
         check('the card shows a code the counter can read', r['code'].startswith('SP') and len(r['code']) == 7, r['code'])
         check('the code on the card is the stored one', r['code'] == (r['d'] or {}).get('code'), r)
         check('the phone number is kept as digits only', (r['d'] or {}).get('phone') == '5205550134', r['d'])
+        check('the email is kept, lowercased', (r['d'] or {}).get('email') == 'marco@example.com', r['d'])
+        # The box says email. Recording it as permission to text would be
+        # consent to something nobody agreed to, and a CRM that receives
+        # sms:true will eventually act on it.
+        check('the consent is recorded as email, not as texting',
+              (r['d'] or {}).get('emailOk') is True and (r['d'] or {}).get('sms') is False, r['d'])
         check('the birthday is month and day, no year', (r['d'] or {}).get('bday') == '4-14', r['d'])
         check('the join is queued for the shop, once', len(r['q']) == 1, r['q'])
+        # "They opted in" is not an answer to a complaint. The sentence they
+        # ticked travels with the yes.
+        check('the queued join carries the sentence that was agreed to',
+              'birthday' in ((r['q'] or [{}])[0].get('terms') or '').lower(), r['q'])
         check('a new member starts on zero visits', r['dots'] == 10 and r['lit'] == 0, r)
         check('the card says who adds a visit', 'added by the counter' in r['txt'], r['txt'][:300])
         await pg.screenshot(path='/tmp/spm/card.png', full_page=True)
