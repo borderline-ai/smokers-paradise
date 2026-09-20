@@ -1,6 +1,6 @@
 import asyncio, json, sys
 from playwright.async_api import async_playwright
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 fails=[];passes=[]
 def check(n,ok,d=''):
     (passes if ok else fails).append(n)

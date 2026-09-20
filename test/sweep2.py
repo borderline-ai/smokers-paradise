@@ -1,6 +1,6 @@
 import asyncio, os
 from playwright.async_api import async_playwright
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 OUT='/tmp/sp9'; os.makedirs(OUT, exist_ok=True)
 async def shots(pg, name, sel='#main', step=740, cap=8):
     H=await pg.evaluate("s=>{const e=document.querySelector(s); return e?e.scrollHeight:0}", sel)

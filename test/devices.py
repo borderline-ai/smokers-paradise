@@ -10,7 +10,7 @@ or control smaller than it should be.
 import asyncio, os, json, sys
 from playwright.async_api import async_playwright
 
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 OUT=sys.argv[1] if len(sys.argv)>1 else '/tmp/dev'
 os.makedirs(OUT, exist_ok=True)
 

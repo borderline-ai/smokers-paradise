@@ -9,71 +9,75 @@ Live at **borderline-ai.github.io/smokers-paradise** (GitHub Pages, from the
 
 ---
 
-## THE ONE THING THAT MATTERS RIGHT NOW
+## THE BACKEND EXISTS NOW. READ THIS BEFORE BELIEVING ANY OLDER NOTE.
 
-**There is no backend, and the product does not work without one.**
+Until stage 171 there was no backend and the product did not work without one.
+Everything was `localStorage` on whichever device it happened on, which was fine
+for a walkthrough and fatal for a shop. That is fixed. `server/` is a Cloudflare
+Worker and a D1 database; stage 171 wired the app to it.
 
-Everything is `localStorage` on whichever device it happened on. That is fine for
-a walkthrough and fatal for a shop. Proven, not assumed — two browser contexts
-are two devices:
+The proof is the same two-device test that used to fail, now run in two real
+browser contexts against the real service — `test/live_backend.py`:
 
 ```
-customer joins on her phone      -> code SP26699 written to HER localStorage
-staff type SP26699 on the iPad   -> "No member with that code on this device."
+customer joins on her phone      -> code written to the SHOP's members table
+staff type that code on the iPad -> "Ana · 1 of 10 visits"
 ```
 
-So today:
-
-| Claimed | Reality |
+| Claimed | Reality now |
 | --- | --- |
-| The shop owns a customer list | Every member record lives only on the phone that created it. The shop has nothing. |
-| Rewards | The counter can never find a real customer. No visit can ever be added. |
-| Order ahead | `SP_API = null`, `OrderStore.live = false`. Orders never reach the counter. |
-| Staff edits a price | Never reaches a customer's phone. Verified: edited 30 -> 999.99 on the shop device, the customer device still showed 30. |
+| The shop owns a customer list | `members`, `visits`, `redemptions` in D1. Exportable in full as CSV from the counter. |
+| Rewards | The counter finds any member from any screen. Only a counter holding a staff session can add a visit. |
+| Order ahead | `SP_API` is set by the Worker. A ticket placed on a phone is on the board within two seconds. |
+| Staff edits a price | Goes to `catalog`, and every phone picks it up on its next open. Tested. |
 
-**Building that backend is the job.** Until it exists, nothing transactional can
-be sold, and no usage-based price can be defended because nothing is counted.
+**With no `SP_API` — the file opened off a disk — not one line of stage 171 runs
+and the behaviour is byte for byte what stage 170 left.** The offline
+walkthrough is a product, not a fallback, and all 65 suites still drive it.
 
-### What the backend has to hold
+### Where everything is
 
-- **members** — first name, phone (digits only), birthday as month-day with no
-  year, sms consent, member code, joined timestamp, shop id
-- **visits** — member, timestamp, who added it
-- **redemptions** — member, timestamp, and **the visit cost at the time**, see
-  stage 167 for why
-- **orders** — the existing ticket shape that `OrderStore` already expects
-- **catalogue overrides** — price and menu edits made from the counter screen
-- **shop config** — the `SHOP_REWARDS` rule, currently in `sp_rewards_cfg_v1`
+- `server/README.md` — the deploy runbook, the full API, and the limits, stated.
+- `server/schema.sql` — the tables, with the reasoning in the comments.
+- `server/src/index.js` — the router. Every route in one place.
+- `server/scripts/serve.mjs` — the same handler under plain Node. No account, no
+  install, no network: `cd server && npm run build && node scripts/serve.mjs`.
+- `stages/s171_backend.py` — what changed in the app, and why each piece.
 
 ### Rules the backend must not break
 
-1. **Only the counter may write a visit.** A visit the customer's own device can
-   create is a coupon anyone can print. The customer's screen is read-only about
-   its own count. This is the central honesty property of the whole product and
-   there is a test that proves it (`test/member.py`, "pressing every control on
-   the card adds no visit").
-2. **A redemption is priced at the moment it happened.** If the owner changes the
-   rule from 10 visits to 6, past redemptions must not be re-priced. Stage 167
-   fixed exactly this bug, which invented four free visits out of nothing.
-3. **The shop owns the member data.** It must be exportable in full, on demand.
-   That is a sales promise, keep it true.
-4. **Offline must degrade, not break.** A shop with bad signal still has to take
-   a join. The existing queue-and-retry shape (`Member.flush`, stage 170) is the
-   right idea, keep it.
+These have not changed and each one now has a test that proves it.
 
-### Where the wiring already is
+1. **Only the counter may write a visit.** There is no route a customer device
+   can reach that inserts into `visits`; `/api/staff/*` will not dispatch
+   without a session issued against a PIN the *server* checked. A visit the
+   customer's own device can create is a coupon anyone can print.
+2. **A redemption is priced at the moment it happened.** `redemptions.cost` is
+   `NOT NULL` and never recomputed. Stage 167 fixed this bug once, which had
+   invented four free visits out of nothing; the schema is what stops it
+   coming back.
+3. **The shop owns the member data**, exportable in full, on demand. Sales
+   promise, keep it true.
+4. **Offline must degrade, not break.** The queue-and-retry shape is kept, and
+   the CRM forward moved to the server so a join no longer depends on the
+   customer reopening the app.
 
-- `SHOP_REWARDS.endpoint` — set it and a join POSTs one flat JSON object:
-  `{first, phone, birthday, sms, code, joined, shop}`. That shape was chosen for
-  a GoHighLevel inbound webhook.
-- `Member.flush()` — drains a retry queue. Called on join and, since stage 170,
-  2.5s after open.
-- `SP_API` / `OrderStore` — an ordering client already written against an API
-  that does not exist. Read it before designing the order endpoints, it tells
-  you the shape that was expected.
-- `Loyalty` — a ~5,700 char module that reads an EXTERNAL loyalty provider. It is
-  dormant (`SP_API` null). The in-house `Member` programme sits beside it, not
-  inside it. If a real provider ever answers, `Loyalty` wins.
+### What is still not done
+
+- **Photographs do not live in the backend.** `catalog` holds prices and names;
+  a photo added at the counter stays on the device that added it. Moving the
+  261 base64 images out of the 12MB HTML and into R2 is the next real piece of
+  work. The build script already refuses a file over 25 MiB, which is the
+  Workers asset cap, so this is a deadline and not a preference.
+- **The shelf has to be seeded once** from the counter before the server can
+  price an order. Until then a ticket is stamped `priced: 'phone'` — reported
+  rather than hidden, so a shop can tell which of its tickets it priced.
+- **`Loyalty`** is still dormant and the service says so honestly:
+  `/api/loyalty/status` answers `provider: 'none'`, which is what makes the app
+  fall through to the shop's own programme. If a real provider ever answers,
+  `Loyalty` wins.
+- **No payments.** The order carries a payment reference field and nothing
+  reads it. The register collects.
 
 ---
 
@@ -131,6 +135,26 @@ python3 test/imgaudit5.py                654 images, network dead, none broken
 python3 test/verify84.py     8 checks    campaign slides resolve
 python3 test/tablet/journey_ipad.py      29 checks, the iPad walkthrough
 ```
+
+And, since stage 171, the two that cover the backend:
+
+```
+cd server && npm test                    40 checks, the service, offline
+python3 test/live_backend.py             23 checks, two real browsers, real service
+```
+
+`npm test` needs nothing installed — Node 24 ships `node:sqlite` and D1 is
+SQLite, so the real Worker handler runs against a file-free stand-in. Two
+"devices" means two cookie jars, which is the exact shape of the bug the
+backend exists to end.
+
+`live_backend.py` starts the service and drives the actual 12MB app in two
+browser contexts. It is the only test that proves the headline claim end to end.
+
+The suites used to have the build's absolute path typed into them
+(`/root/work/...`), which made all 65 unrunnable anywhere but the container they
+were written in. They resolve it now — see `test/sppath.py`, and set `SP_BUILD`
+to point at a build somewhere else.
 
 A caution learned the hard way: **two green suites can both be right and still
 miss the bug.** The image audit said zero broken images on the same build where
@@ -203,8 +227,11 @@ version on their sign.
 ```
 app/index.html        the whole app, the build output
 stages/sNNN_*.py      the numbered edits that produced it, in order
+server/               the shop's backend: Cloudflare Worker + D1, and its own tests
 test/*.py             Playwright suites, network-dead
 test/tablet/*.py      the same, at iPad sizes
+test/live_backend.py  the one suite that is NOT network-dead: it drives the
+                      local service, and blocks everything that is not it
 data/                 Spanish strings, hero device map, language data
 docs/                 the Holy Cow source this was converted from, and its checksum
 ```
@@ -212,9 +239,20 @@ docs/                 the Holy Cow source this was converted from, and its check
 ## Working on it
 
 ```bash
-cp app/index.html app/index.before171.html      # always
-python3 stages/s171_whatever.py
+cp app/index.html app/index.before172.html      # always
+python3 stages/s172_whatever.py
 python3 test/member.py && python3 test/counter.py
 ```
 
-Then open `app/index.html` in a browser. There is no build step and no server.
+Then open `app/index.html` in a browser. There is still no build step for the
+app itself.
+
+To see it as a shop rather than as a file — with a real counter, a real member
+list and a real order board — run the service locally. It needs no account, no
+install and no network:
+
+```bash
+cd server && npm run build && node scripts/serve.mjs
+#   the shop     http://127.0.0.1:8787/
+#   the counter  http://127.0.0.1:8787/counter   PIN 7413
+```

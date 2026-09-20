@@ -15,7 +15,7 @@ import asyncio
 import json
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 
 FORBIDDEN = [
     ('erig', 'torch', 'an e-rig is heated by its battery, not by a flame'),

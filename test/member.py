@@ -10,7 +10,7 @@ nothing the customer can press adds a visit.
 import asyncio, os, sys
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 os.makedirs('/tmp/spm', exist_ok=True)
 fails, passes = [], []
 

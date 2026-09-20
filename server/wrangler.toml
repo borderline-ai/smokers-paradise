@@ -1,0 +1,48 @@
+# =====================================================================
+# One Worker serves the app and answers the app, from the same origin.
+#
+# That is not a deployment preference. `call()` in app/index.html sends
+# credentials: 'same-origin', and the counter's proof that it is the counter
+# is a cookie. Split the two across origins and the register board stops
+# working, or it only works with SameSite=None, which is the setting that
+# would let a link in a text message make the counter's own browser add a
+# visit. So: one origin.
+#
+# This replaces GitHub Pages as the address customers are given. Pages can
+# keep serving the walkthrough file; it just cannot be the shop.
+# =====================================================================
+
+name = "smokers-paradise"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# Namespaces every row. Cloning this service for a second shop means a second
+# database and a different value here, never a shared table.
+SHOP = "smokers-paradise"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# The Worker runs first on every request, because index.html has to be handed
+# its API base before the browser parses it. Without this the static handler
+# would answer '/' with the untouched file and SP_API would be null — the app
+# would come up in walkthrough mode on the shop's own address, which is the
+# exact failure this whole service exists to end.
+run_worker_first = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "smokers-paradise"
+# Filled in by `npm run db:create`. It is not a secret; it is an account-scoped
+# identifier and it belongs in version control so a redeploy is reproducible.
+database_id = "PASTE_THE_ID_FROM_db:create"
+
+[triggers]
+# Drains the CRM queue. A webhook that was down when somebody joined should
+# not wait for that person to open the app again — stage 170's lesson, moved
+# somewhere it does not depend on the customer coming back.
+crons = ["*/10 * * * *"]
+
+[observability]
+enabled = true

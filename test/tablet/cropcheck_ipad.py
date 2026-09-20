@@ -26,7 +26,7 @@ customer is only seeing part of.
 import asyncio
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 
 PROBE = """() => {
   const out = [];

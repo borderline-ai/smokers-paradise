@@ -11,7 +11,7 @@ margin, the PRODUCT gets cut instead of the empty space, and a cut product on
 an advert reads as a broken image."""
 import asyncio
 from playwright.async_api import async_playwright
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 
 PROBE = """() => {
   const out=[];

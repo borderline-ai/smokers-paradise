@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from net import serve_photos
 from playwright.sync_api import sync_playwright
 
-SRC  = pathlib.Path('/root/work/smokers-paradise-demo/build/index.html')
+SRC  = pathlib.Path(__import__('sppath').APP)
 FILE = SRC.as_uri()
 res = []
 def ck(name, cond, detail=''):

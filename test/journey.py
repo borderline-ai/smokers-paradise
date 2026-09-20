@@ -3,7 +3,7 @@
 import re, sys, json, pathlib
 from playwright.sync_api import sync_playwright
 
-FILE = pathlib.Path('/root/work/smokers-paradise-demo/build/index.html').as_uri()
+FILE = pathlib.Path(__import__('sppath').APP).as_uri()
 results=[]; errors=[]
 def ck(name, cond, detail=''):
     results.append((name, bool(cond), detail))
