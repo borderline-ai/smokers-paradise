@@ -13,6 +13,8 @@
     "db:init": "wrangler d1 execute smokers-paradise --remote --file=./schema.sql",
     "db:init:local": "wrangler d1 execute smokers-paradise --local --file=./schema.sql",
     "pin": "wrangler secret put STAFF_PIN",
+    "import": "node scripts/import-catalogue.mjs",
+    "serve": "node scripts/serve.mjs",
     "members": "wrangler d1 execute smokers-paradise --remote --command \"SELECT code, first, phone, joined FROM members ORDER BY joined DESC LIMIT 50\""
   },
   "devDependencies": {

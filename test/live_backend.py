@@ -102,7 +102,62 @@ async def main():
             check('and does not put a staff door on it', not served['staff'], served)
 
             await phone.evaluate("() => document.querySelector('#gateYes').click()")
-            await phone.wait_for_timeout(800)
+            await phone.wait_for_timeout(2200)
+
+            # ---- stage 172: the photographs are files now ---------------------
+            # They are written into the document as `img/<hash>.webp`, with no
+            # leading slash, so that the same file also works opened off a disk.
+            # Served, that has to resolve against the root — which is what the
+            # <base href="/"> the Worker injects is for. If it were missing this
+            # would still pass on '/' and fail on '/counter', so both are checked.
+            # The SIZE of the document is the assertion. Searching it for
+            # "data:image" is not, and that is worth recording: the file
+            # carries a comment showing the shape of a PHOTOS entry —
+            #     /* PHOTOS['disp0::miami-mint'] = 'data:image/webp;base64,...' */
+            # — and a substring check reads that comment as a photograph. It
+            # went red while the thing it was checking was entirely true.
+            # What matters is that 6.8 MB of pictures are no longer inside a
+            # document that is re-fetched whenever a price changes.
+            r = await phone.evaluate("""async () => {
+                const doc = await (await fetch('/', {cache:'no-store'})).blob();
+                const im = [...document.querySelectorAll('img')];
+                return {bytes: doc.size,
+                        raster: im.filter(i => /^data:image\/(webp|png|jpeg)/
+                          .test(i.getAttribute('src')||'')).length} }""")
+            check('the photographs are out of the document',
+                  r['bytes'] < 4 * 1024 * 1024,
+                  'the document is %.2f MB' % (r['bytes'] / 1048576.0))
+            check('and no img element carries a photograph as base64',
+                  r['raster'] == 0, r)
+
+            # Forced eager and given time, the way imgaudit5 does it. Reading
+            # naturalWidth off a lazy image nobody has scrolled to measures the
+            # loading strategy, not whether the picture is there.
+            r = await phone.evaluate("""async () => {
+                go('home'); await new Promise(r=>setTimeout(r,900));
+                const m = document.querySelector('#main');
+                for(let y=0;y<m.scrollHeight;y+=420){ m.scrollTop=y;
+                  await new Promise(r=>setTimeout(r,140)) }
+                document.querySelectorAll('img[loading="lazy"]').forEach(i=>i.loading='eager');
+                m.scrollTop = 0;
+                await new Promise(r=>setTimeout(r,2600));
+                const im = [...document.querySelectorAll('.view.on img')];
+                return {n: im.length,
+                        broken: im.filter(i=>i.naturalWidth<=2).length,
+                        rel: im.filter(i=>(i.getAttribute('src')||'').startsWith('img/')).length,
+                        sample: im.length ? im[0].currentSrc : ''} }""")
+            check('and every photograph loads over http',
+                  r['n'] > 4 and r['broken'] == 0, r)
+            check('the relative paths resolve against the root',
+                  r['rel'] > 0 and '/img/' in r['sample'], r['sample'][:120])
+
+            r = await phone.evaluate("""async () => {
+                const reg = await navigator.serviceWorker.getRegistration('/');
+                return {registered: !!reg,
+                        scope: reg ? reg.scope : '',
+                        sw: (await fetch('/sw.js')).status} }""")
+            check('a service worker is registered, so an outage is survivable',
+                  r['registered'] and r['sw'] == 200, r)
 
             r = await phone.evaluate("""async () => {
                 go('rewards'); await new Promise(r=>setTimeout(r,600));
@@ -151,6 +206,21 @@ async def main():
             r = await ipad.evaluate("""() => ({
                 staff: document.querySelector('#staff').classList.contains('on')})""")
             check('the right one does', r['staff'], r)
+
+            # The counter lives at /counter, one path segment deep, which is the
+            # case a root-relative path would have got right by luck and a
+            # relative one gets wrong without <base>. This is that check.
+            r = await ipad.evaluate("""async () => {
+                document.querySelectorAll('img[loading]').forEach(i=>i.loading='eager');
+                await new Promise(r=>setTimeout(r,2400));
+                const im = [...document.querySelectorAll('img')].filter(
+                  i => (i.getAttribute('src')||'').startsWith('img/')
+                       && i.getBoundingClientRect().width > 0);
+                return {n: im.length,
+                        broken: im.filter(i=>i.naturalWidth<=2).length,
+                        sample: im.length ? im[0].currentSrc : ''} }""")
+            check('photographs load on the counter address too, one path deep',
+                  r['n'] > 0 and r['broken'] == 0 and '/img/' in r['sample'], r)
 
             # ---- THE TEST THIS WHOLE BACKEND EXISTS FOR ---------------------
             r = await ipad.evaluate("""async (code) => {

@@ -22,7 +22,7 @@ keep serving the standalone walkthrough file. It cannot be the shop.
 | `visits` | one row per visit, with which staff session wrote it |
 | `redemptions` | with `cost` — **the visit price at the moment it happened**, see stage 167 |
 | `orders` / `order_items` | the ticket exactly as placed, plus lines so the shop can see what sells |
-| `catalog` | the seeded shelf, and every price or menu edit made at the counter |
+| `catalog` | the seeded shelf, every price or menu edit made at the counter, and the owner's imported inventory |
 | `config` | the `SHOP_REWARDS` rule, held where every device can read it |
 | `staff_sessions`, `pin_attempts` | the counter's door |
 | `outbound` | the CRM webhook queue, retried by the server |
@@ -70,6 +70,48 @@ Then, once, from the counter screen on the deployed address: open **Staff →
 Menu** and save anything. That seeds the shelf so the server can price an
 order. Until it is seeded, the server takes the phone's prices and marks the
 ticket `priced: 'phone'` rather than pretending otherwise.
+
+---
+
+## The owner's real inventory
+
+The 259 products the app ships are a starter catalogue and always were. This
+replaces them:
+
+```bash
+npm run import -- inventory.csv --photos ~/Desktop/product-photos \
+  --url https://theshop --pin 7413 --retire
+```
+
+It reads a spreadsheet the way one actually turns up — the header says "Item"
+or "Product" or "Description", prices say "$12.99" and "1,299.00" and
+"12.50 ea", there is a blank row where somebody hit enter, and the same product
+is in there twice. None of that stops it.
+
+It prints what it made of the file **before it sends anything**, so a shop sees
+its twenty rejected rows while it can still fix the spreadsheet. Then it signs
+in, checks the shop will accept the import, asks, and only then copies
+photographs into `app/img` and posts. Nothing is written to the repository
+until the send is known to be possible — an earlier version copied first, got
+refused, and left orphans behind.
+
+`--photos` matches on filename with the extension ignored, so a spreadsheet
+saying `pulse15k` finds `pulse15k.JPG`. Each photograph is copied in under the
+hash of its own bytes, the same scheme stage 172 used. Run `npm run deploy`
+afterwards so the shop serves them.
+
+**Two refusals that should not be softened:**
+
+- A row with no price is skipped, never priced at zero. The register is the
+  final word, but the screen is what the customer read before they walked in.
+- A photograph the folder does not contain is blanked, never passed through. A
+  product with no picture has a gap the app already draws; a product pointing
+  at a 404 does not.
+
+`--retire` hides every starter product the file does not mention — hides, not
+deletes, so importing the wrong file at four in the afternoon is recoverable.
+It refuses outright if the shelf was never seeded, rather than reporting a
+clean sweep of nothing.
 
 ### Afterwards
 
@@ -145,15 +187,16 @@ surface off.
 | `GET /api/staff/members/export.csv` | the whole list. |
 | `GET` / `POST /api/staff/config` | the rule. The owner's copy includes the CRM webhook. |
 | `POST /api/staff/catalog/seed` | the shelf, once. |
-| `POST /api/staff/catalog/overrides` | price and menu edits. Photos are refused, not truncated. |
+| `POST /api/staff/catalog/overrides` | price and menu edits. A photo is a path; a data: URI is refused, not truncated. |
+| `POST /api/staff/catalog/import` | the owner's inventory as CSV. `retireStarter` hides what the file omits. |
 
 ---
 
 ## Tests
 
 ```bash
-npm test                     # 40 checks, offline, nothing installed
-python3 ../test/live_backend.py   # 23 checks, two real browsers, real service
+npm test                          # 58 checks, offline, nothing installed
+python3 ../test/live_backend.py   # 29 checks, two real browsers, real service
 ```
 
 `npm test` drives the real Worker handler over real requests, against
@@ -173,9 +216,15 @@ passes.
 
 ## Known limits, stated rather than hidden
 
-- **Photographs do not live here.** `catalog` holds prices and names. A photo
-  added at the counter stays on the device that added it. Moving them out of
-  the 12MB HTML into R2 is the next piece of work, not this one.
+- **Nothing here stores photograph bytes.** `catalog` holds a *path* to one.
+  Since stage 172 the pictures are files in `app/img`, served as static assets
+  and cached immutable because they are named by content. The missing piece is
+  an upload endpoint: the counter's bulk photo import still writes base64 into
+  one device's localStorage, where it is stranded. `npm run import --photos` is
+  the way in until R2 is wired up.
+- **The app still ships the starter catalogue inline.** The server merges its
+  own rows on top. Making the server the only source of products is the next
+  stage, and it is worth doing once the owner's real list is in.
 - **The order's reward field is a request, never a discount.** It carries a
   label and a status and cannot move a total. The register is the final word.
 - **`priced: 'phone'`** on a ticket means the server had no price for that line.
@@ -183,5 +232,10 @@ passes.
   shop should be able to tell which of its tickets it actually priced.
 - **One shop per database.** `SHOP` namespaces every row so a second shop is a
   second database and a different value, never a shared table.
-- **The app is 11.5 MiB and a Workers static asset caps at 25 MiB.** `npm run
-  build` refuses rather than letting a deploy fail halfway.
+- **The app is 1.9 MiB since stage 172**, down from 11.5, against a 25 MiB cap
+  on a Workers static asset. `npm run build` still refuses rather than letting
+  a deploy fail halfway, and it also refuses if `app/img` is missing — without
+  it every product photograph on the deployed shop is a broken image.
+- **Offline is a service worker now**, not an inlined document. It survives an
+  outage after one load; it does not survive never having loaded. The file on
+  disk still does that.

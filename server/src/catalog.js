@@ -17,20 +17,46 @@
    its next open. The shape of `patch` is the shape of `S.edits[id]` in the
    app, so the client applies it with code it already has.
 
-   PHOTOS are refused. `S.edits` can carry a base64 photo and some of them are
-   megabytes. A D1 row is not a photo store and quietly truncating one would
-   put a broken image on a customer's phone, which rule 2 in CLAUDE.md exists
-   to prevent. The call fails loudly and says where photos belong instead.
+   A PHOTOGRAPH IS A PATH, NEVER BASE64. Since stage 172 the app references
+   pictures as `img/<hash>.webp`, and `rebuildCatalog()` already turns
+   `S.edits[id].photo` straight into `PHOTOS[id]` and then into an <img src>.
+   So a patch may carry a photo, as long as it carries a reference to one.
+
+   A data: URI is still refused, and loudly. Some of them are megabytes, a D1
+   row is not a photo store, and quietly truncating one would put a broken
+   image on a customer's phone — which is what rule 2 in CLAUDE.md exists to
+   prevent. Before stage 172 this rejected the word `photo` outright; that was
+   right when a photo meant a megabyte and wrong the moment it meant a path.
    ===================================================================== */
 
 import { ok, fail, str, money, nowIso } from './http.js';
+import { readCatalogue } from './importer.js';
 
 const MAX_PATCH = 8 * 1024;        /* a price and some words, not a picture */
 
+/* `img/ab12….webp` as stage 172 writes them, or a full https URL for a shop
+   hosting its pictures somewhere else. Never a data: URI, and never a path
+   that climbs out of the image directory. */
+function cleanPhoto(v) {
+  const p = str(v, 400);
+  if (!p) return { value: '' };
+  if (/^data:/i.test(p)) return { error: 'photo' };
+  if (p.includes('..')) return { error: 'path' };
+  if (/^img\/[A-Za-z0-9._-]+$/.test(p)) return { value: p };
+  if (/^https:\/\//.test(p)) {
+    try { return { value: new URL(p).toString() }; } catch { return { error: 'path' }; }
+  }
+  return { error: 'path' };
+}
+
 function cleanPatch(p) {
   if (!p || typeof p !== 'object') return null;
-  if (p.photo) return { error: 'photo' };
   const out = {};
+  if ('photo' in p && p.photo) {
+    const ph = cleanPhoto(p.photo);
+    if (ph.error) return { error: ph.error };
+    out.photo = ph.value;
+  }
   if ('name'  in p) out.name  = str(p.name, 120);
   if ('brand' in p) out.brand = str(p.brand, 60);
   if ('cat'   in p) out.cat   = str(p.cat, 30);
@@ -159,7 +185,10 @@ export async function saveOverrides(env, shop, body) {
     if (!c) continue;
     if (c.error === 'photo') {
       return fail(413, 'photo',
-        'Photos are not stored here. Put the picture in the app build; this service keeps prices and names.');
+        'A photograph has to be sent as a path, not as the picture itself. Put the file in app/img and send its name.');
+    }
+    if (c.error === 'path') {
+      return fail(400, 'bad photo', 'That is not a picture this shop serves.');
     }
     if (c.error) return fail(400, 'bad edit', 'That price is not a number the register could ring.');
     stmts.push(env.DB.prepare(
@@ -176,7 +205,7 @@ export async function saveOverrides(env, shop, body) {
     const c = cleanPatch(it);
     if (!c || c.error === 'photo') {
       return fail(413, 'photo',
-        'Photos are not stored here. Put the picture in the app build; this service keeps prices and names.');
+        'A photograph has to be sent as a path, not as the picture itself. Put the file in app/img and send its name.');
     }
     if (c.error) continue;
     stmts.push(env.DB.prepare(
@@ -198,4 +227,93 @@ export async function saveOverrides(env, shop, body) {
   if (!stmts.length) return ok({ saved: 0 });
   for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
   return ok({ saved: stmts.length });
+}
+
+
+/* ---------------------------------------------------------------------
+   POST /api/staff/catalog/import   {csv, retireStarter}
+
+   The owner's real inventory, replacing the starter catalogue. The 259
+   researched products in the app were always placeholders and CLAUDE.md
+   always said so; this is the call that makes that true.
+
+   `retireStarter` hides every seeded product the spreadsheet did not
+   mention. Hides, not deletes — an owner who imports the wrong file at
+   four in the afternoon can import the right one and get their shelf
+   back, and a deleted row would have taken the order history's only
+   record of what a thing used to be called with it.
+
+   Nothing is silently dropped. A row without a price does not become a
+   product priced at nothing; it comes back in `skipped` with its line
+   number, because a shop that uploads 400 products and sees 380 is
+   entitled to know which twenty and why.
+   --------------------------------------------------------------------- */
+export async function importCatalogue(env, shop, body) {
+  const read = readCatalogue(body.csv || '');
+  if (read.error) return fail(400, 'bad file', read.error);
+  if (!read.items.length) {
+    return fail(400, 'nothing',
+      'Not one row in that file became a product. ' +
+      (read.skipped.length ? 'The first problem was on line ' + read.skipped[0].line +
+        ': ' + read.skipped[0].why + '.' : ''));
+  }
+
+  const stamp = nowIso();
+  const stmts = [];
+  const bad = [];
+
+  for (const it of read.items) {
+    const c = cleanPatch(it);
+    if (!c || c.error) {
+      bad.push({ id: it.id, name: it.name,
+                 why: c && c.error === 'photo' ? 'the photo was sent as a picture, not a path'
+                    : c && c.error === 'path'  ? 'that photo is not one this shop serves'
+                    : 'the price is not a number the register could ring' });
+      continue;
+    }
+    /* custom = 1: these are the shop's own products, not edits to ours. They
+       arrive on customer phones through S.custom, which the app already
+       merges into the shelf and already reads photos from. */
+    stmts.push(env.DB.prepare(
+      `INSERT INTO catalog (shop, id, patch, custom, edited, updated)
+       VALUES (?1, ?2, ?3, 1, 1, ?4)
+       ON CONFLICT (shop, id) DO UPDATE SET patch = ?3, custom = 1, edited = 1, updated = ?4`
+    ).bind(shop, it.id, JSON.stringify(c.value), stamp));
+  }
+
+  let retired = 0;
+  if (body.retireStarter) {
+    const keep = new Set(read.items.map(i => i.id));
+    const rows = await env.DB
+      .prepare('SELECT id, patch FROM catalog WHERE shop = ?1 AND custom = 0').bind(shop).all();
+    for (const r of (rows.results || [])) {
+      if (keep.has(r.id)) continue;
+      let patch = {};
+      try { patch = JSON.parse(r.patch); } catch { patch = {}; }
+      patch.hidden = true;
+      stmts.push(env.DB.prepare(
+        'UPDATE catalog SET patch = ?3, edited = 1, updated = ?4 WHERE shop = ?1 AND id = ?2'
+      ).bind(shop, r.id, JSON.stringify(patch), stamp));
+      retired++;
+    }
+    if (!rows.results || !rows.results.length) {
+      /* Nothing to retire means the shelf was never seeded, and the starter
+         catalogue is still living inside the app where this service cannot
+         reach it. Saying so is better than reporting a clean sweep. */
+      return fail(409, 'not seeded',
+        'The starter catalogue has not been seeded, so there is nothing here to retire. ' +
+        'Open Staff then Menu once on the shop address, then import again.');
+    }
+  }
+
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+
+  return ok({
+    imported: read.items.length - bad.length,
+    retired,
+    /* Both lists, in full. A summary that hides the rejects is how a shop
+       finds out about a missing product from a customer. */
+    skipped: read.skipped.concat(bad).slice(0, 200),
+    skippedCount: read.skipped.length + bad.length
+  });
 }

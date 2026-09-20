@@ -1,4 +1,5 @@
 import asyncio, json, sys
+import os
 from playwright.async_api import async_playwright
 B=__import__('sppath').APP
 fails=[];passes=[]
@@ -30,16 +31,40 @@ async def m():
         # A slide may lead on a single photograph rather than a lead-and-back
         # pair: the "New mods just landed" slide is one group shot of five
         # devices and has no back product at all. The rule is that every image
-        # a slide DOES carry is embedded in this file, not that every slide
+        # a slide DOES carry is one the shop ships, not that every slide
         # carries two of them.
+        #
+        # This used to read "embedded in this file", and until stage 172 that
+        # was the same sentence: every photograph was base64 inside the
+        # document, so "starts with data:" WAS "we ship it". Stage 172 took
+        # 6.8 MB of photographs out into app/img/ and the two came apart — the
+        # test went red while the property it cares about was still true.
+        #
+        # The property it cares about is rule 2 in CLAUDE.md: every product
+        # picture is a real photograph the shop holds, never a hotlink to a
+        # manufacturer CDN or a temporary Instagram URL that will rot. So that
+        # is what is asserted now, and it is checked harder than before —
+        # "data: or a local file" AND the file is actually on disk. A path to
+        # a photograph that does not exist used to be impossible and is now
+        # merely wrong, which is exactly the kind of thing a test is for.
         r=await pg.evaluate("""()=>PROMOS.filter(p=>p.shot).map(p=>({id:p.id,
-             hero: p.shot.hero? (p.shot.hero()||'').slice(0,15) : null,
-             back: p.shot.back? (p.shot.back()||'').slice(0,15) : null}))""")
-        def embedded(v):
-            return v is None or v.startswith('data:image')
-        check('every image a slide carries is embedded in this file',
-              all(embedded(x['hero']) and embedded(x['back']) for x in r)
-              and any(x['hero'] for x in r), r)
+             hero: p.shot.hero? (p.shot.hero()||'') : null,
+             back: p.shot.back? (p.shot.back()||'') : null}))""")
+        appdir = os.path.dirname(__import__('sppath').APP)
+
+        def ships(v):
+            if v is None or v == '':
+                return v is None
+            if v.startswith('data:image'):
+                return True
+            if v.startswith('img/'):
+                return os.path.exists(os.path.join(appdir, v))
+            return False          # anything remote is a hotlink, and is refused
+
+        bad = [x for x in r if not (ships(x['hero']) and ships(x['back']))]
+        check('every image a slide carries is one the shop ships, and it is there',
+              not bad and any(x['hero'] for x in r),
+              bad or [dict(x, hero=(x['hero'] or '')[:40]) for x in r])
         r=await pg.evaluate("""async ()=>{
           go('account'); await new Promise(r=>setTimeout(r,1000));
           const out=[];

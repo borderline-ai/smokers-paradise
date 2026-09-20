@@ -4,9 +4,11 @@ Shop app for Smokers Paradise, Nogales AZ. Built by BorderLine AI.
 
 Open `CLAUDE.md` first. It explains how the codebase works and the constraints.
 
-The app is one 12MB HTML file with no build step, edited only by the numbered
-stage scripts in `stages/`. Open `app/index.html` in a browser and it runs with
-the network completely off — that is tested, not assumed.
+The app is one HTML file with no build step, edited only by the numbered stage
+scripts in `stages/`. Since stage 172 it is 1.9 MB, with the 309 product
+photographs beside it in `app/img/` rather than inlined as base64. Open
+`app/index.html` in a browser and it still runs with the network completely off
+— that is tested, not assumed.
 
 Since stage 171 it also has a backend. `server/` is a Cloudflare Worker and a
 D1 database holding the member list, visits, redemptions, orders, the catalogue
@@ -40,8 +42,15 @@ python3 test/member.py && python3 test/counter.py
 python3 test/member.py            # the customer's half of rewards
 python3 test/counter.py           # the counter's half
 python3 test/tablet/journey_ipad.py
-cd server && npm test             # the service, offline, nothing installed
-python3 test/live_backend.py      # two real browsers against the real service
+cd server && npm test             # 58 checks, the service, offline
+python3 test/live_backend.py      # 29 checks, two real browsers, real service
+```
+
+## Load the shop's real inventory
+
+```bash
+cd server
+npm run import -- inventory.csv --photos ~/photos --url https://theshop --retire
 ```
 
 Playwright is needed for the Python suites:

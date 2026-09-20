@@ -62,13 +62,73 @@ These have not changed and each one now has a test that proves it.
    the CRM forward moved to the server so a join no longer depends on the
    customer reopening the app.
 
+## THE PHOTOGRAPHS ARE FILES NOW (stages 172 and 173)
+
+They were 77% of the document: 328 base64 blobs, measured at 8.9 MB against
+2.3 MB of actual code. Stage 172 took them out to `app/img/`, named by the
+hash of their own bytes. **11.56 MB -> 1.94 MB.**
+
+The trick worth knowing before editing anything here is the missing slash.
+Paths are written `img/<hash>.webp`, relative, never `/img/...`:
+
+```
+opened off a disk   file:///.../app/index.html  ->  file:///.../app/img/x.webp
+served by the shop  <base href="/"> is injected ->  /img/x.webp
+```
+
+That one character is why all 65 file:// suites still pass with the network
+dead — a file:// image is not a network request — and why `/counter`, which is
+one path segment deep, does not ask for `/counter/img/...`. The `<base>` is
+injected by the Worker, in `injectBoot`.
+
+Offline was rebuilt rather than dropped. `server/assets/sw.js` caches the
+document and each photograph the first time it is shown. It does **not**
+pre-download all 309: a customer on cellular should not pay for the whole shelf
+to look at one vape. What it buys is a shop that keeps taking orders through an
+internet outage. What it does not buy is a cold first load with no signal ever
+— for that, `app/index.html` off a disk still works.
+
+Photographs are named by content, so they are served `immutable` for a year and
+a replacement arrives under a new name rather than as a stale copy.
+
+### The owner's real list
+
+The 259 products in the app were always a starter catalogue. `npm run import`
+replaces them:
+
+```bash
+cd server
+npm run import -- inventory.csv --photos ~/photos --url https://theshop --retire
+```
+
+It reads the spreadsheet the way one actually turns up — "Item" or "Product" or
+"Description" for a header, "$12.99" and "1,299.00" and "12.50 ea" for a price,
+a blank row in the middle, the same product twice — and it reports every row it
+would not import, with the line number, before it sends anything.
+
+Two refusals in there are load-bearing and should not be softened:
+
+- **A row with no price is skipped, never priced at zero.** The register is the
+  final word, but the screen is what the customer read before they walked in.
+- **A photograph the folder does not contain is blanked, never passed through.**
+  A product with no picture has a gap the app already draws; a product pointing
+  at a 404 does not. That is rule 2, and the first version of the script got it
+  wrong — it wrote `img/nosuchfile` into a live listing.
+
+`--retire` hides the starter products the file does not mention. Hides, not
+deletes, so importing the wrong file at four in the afternoon is recoverable.
+
 ### What is still not done
 
-- **Photographs do not live in the backend.** `catalog` holds prices and names;
-  a photo added at the counter stays on the device that added it. Moving the
-  261 base64 images out of the 12MB HTML and into R2 is the next real piece of
-  work. The build script already refuses a file over 25 MiB, which is the
-  Workers asset cap, so this is a deadline and not a preference.
+- **The app still ships the starter catalogue inline.** `PRODUCTS` is built
+  from `BASE_PRODUCTS` in the document and then merged with what the server
+  sends. Making the server the only source is the next stage, and it is only
+  worth doing once the owner's real list is actually in.
+- **There is no photo upload from the counter.** The bulk photo import still
+  writes base64 into one device's localStorage, where it is stranded. The
+  service now accepts a photo *path*, so the missing piece is somewhere to PUT
+  the bytes — R2, and an endpoint. `npm run import --photos` is the way in
+  until then.
 - **The shelf has to be seeded once** from the counter before the server can
   price an order. Until then a ticket is stamped `priced: 'phone'` — reported
   rather than hidden, so a shop can tell which of its tickets it priced.
@@ -139,8 +199,8 @@ python3 test/tablet/journey_ipad.py      29 checks, the iPad walkthrough
 And, since stage 171, the two that cover the backend:
 
 ```
-cd server && npm test                    40 checks, the service, offline
-python3 test/live_backend.py             23 checks, two real browsers, real service
+cd server && npm test                    58 checks, the service, offline
+python3 test/live_backend.py             29 checks, two real browsers, real service
 ```
 
 `npm test` needs nothing installed — Node 24 ships `node:sqlite` and D1 is
@@ -225,7 +285,9 @@ version on their sign.
 ## Layout
 
 ```
-app/index.html        the whole app, the build output
+app/index.html        the whole app, the build output (1.9 MB since stage 172)
+app/img/              309 photographs, named by the hash of their own bytes.
+                      Referenced as `img/<hash>.webp` — relative, no slash.
 stages/sNNN_*.py      the numbered edits that produced it, in order
 server/               the shop's backend: Cloudflare Worker + D1, and its own tests
 test/*.py             Playwright suites, network-dead
@@ -239,8 +301,8 @@ docs/                 the Holy Cow source this was converted from, and its check
 ## Working on it
 
 ```bash
-cp app/index.html app/index.before172.html      # always
-python3 stages/s172_whatever.py
+cp app/index.html app/index.before174.html      # always
+python3 stages/s174_whatever.py
 python3 test/member.py && python3 test/counter.py
 ```
 

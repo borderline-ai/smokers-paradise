@@ -33,7 +33,16 @@ const API = '/api';
    makes it put the PIN pad up. Injected here rather than baked into the file
    so the same build runs from a disk with no server, which is tested. */
 function injectBoot(response, staff) {
-  const boot = '<script>window.SP_API=' + JSON.stringify(API) +
+  /* <base> FIRST, before anything in the document can resolve a relative URL.
+
+     Since stage 172 every photograph is referenced as `img/<hash>.webp` with
+     no leading slash, so that the same file also works opened straight off a
+     disk. Served, that relative path has to resolve against the root or the
+     counter address would ask for /counter/img/... and get nothing. One tag
+     fixes it for every URL in the document at once, which is why the paths
+     are relative rather than root-relative in the first place. */
+  const boot = '<base href="/">' +
+    '<script>window.SP_API=' + JSON.stringify(API) +
     (staff ? ';window.SP_STAFF=1' : '') + ';</script>';
 
   const headers = new Headers(response.headers);
@@ -89,8 +98,16 @@ async function handleApi(request, env, ctx, url, shop) {
      a request that is not JSON or is a hundred megabytes. */
   let body = {};
   if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
-    body = await readJson(request);
-    if (body === null) return fail(400, 'bad body', 'That request was not readable JSON.');
+    /* A whole shop's inventory is a bigger thing than a join, and it arrives
+       as one POST. Everything else stays on the small limit, because a 2 MB
+       ceiling on /orders would only ever be used by somebody abusing it. */
+    const big = path.startsWith('/staff/catalog/');
+    body = await readJson(request, big ? 4 * 1024 * 1024 : 256 * 1024);
+    if (body === null) {
+      return fail(400, 'bad body', big
+        ? 'That file was not readable, or it is bigger than 4 MB.'
+        : 'That request was not readable JSON.');
+    }
   }
 
   /* ---- staff first, because the guard has to come before the routing ----
@@ -146,6 +163,9 @@ async function handleApi(request, env, ctx, url, shop) {
     }
     if (seg[1] === 'catalog' && seg[2] === 'overrides' && method === 'POST') {
       return C.saveOverrides(env, shop, body);
+    }
+    if (seg[1] === 'catalog' && seg[2] === 'import' && method === 'POST') {
+      return C.importCatalogue(env, shop, body);
     }
 
     return notFound('counter route');
@@ -262,6 +282,24 @@ export default {
        single-page app and a deep link is not a missing file. */
     const asset = await env.ASSETS.fetch(request);
     if (asset.status === 404) return serveApp(request, env, false);
+
+    /* Photographs are named by the hash of their own bytes, so a given name
+       can never refer to different bytes later. That is what makes a year of
+       immutable caching safe rather than reckless: replacing a photograph
+       produces a new name, so nobody is ever left holding a stale one. */
+    if (url.pathname.startsWith('/img/')) {
+      const h = new Headers(asset.headers);
+      h.set('cache-control', 'public, max-age=31536000, immutable');
+      return new Response(asset.body, { status: asset.status, headers: h });
+    }
+    /* The worker script itself must not be cached by the browser, or a deploy
+       could not replace it and the shop would keep serving last week's app out
+       of a cache it cannot reach. */
+    if (url.pathname === '/sw.js') {
+      const h = new Headers(asset.headers);
+      h.set('cache-control', 'no-cache');
+      return new Response(asset.body, { status: asset.status, headers: h });
+    }
     return asset;
   },
 
