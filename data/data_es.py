@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""English to Spanish for everything the shop says in its own voice.
+
+Northern-Mexico Spanish, the way it is spoken on both sides at Nogales, not
+textbook Castilian: "recoger" not "recogida", "tienda" not "establecimiento",
+usted dropped in favour of tú because that is how this counter talks.
+
+Product names, brand names, flavour names and prices are NOT in here. Nobody
+translates "Geek Bar Pulse X" or "Blue Razz Ice", and a shop that did would
+look like it had run its own shelf through a machine.
+"""
+import json
+
+ES = {
+    # ---- the frame ----------------------------------------------------------
+    "Shop": "Tienda",
+    "Deals": "Ofertas",
+    "Bag": "Bolsa",
+    "You": "Tú",
+    "Menu": "Menú",
+    "Search the whole shelf": "Busca en todo el estante",
+    "Sort": "Ordenar",
+    "Brand": "Marca",
+    "All": "Todo",
+    "Featured": "Destacados",
+    "Newest": "Más nuevos",
+    "Price: Low to High": "Precio: de menor a mayor",
+    "Price: High to Low": "Precio: de mayor a menor",
+    "Brand: A–Z": "Marca: A–Z",
+    "Puff Count: High to Low": "Puffs: de más a menos",
+    "Price low to high": "Precio de menor a mayor",
+    "Price high to low": "Precio de mayor a menor",
+    "By category": "Por categoría",
+    "A to Z": "De la A a la Z",
+    "Compare": "Comparar",
+    "Cancel": "Cancelar",
+    "Save": "Guardar",
+    "Exit": "Salir",
+    "Register": "Caja",
+    "Guest": "Invitado",
+    "Privacy": "Privacidad",
+    "Terms": "Términos",
+    "Shelf": "Estante",
+    "In store": "En la tienda",
+    "At the counter": "En el mostrador",
+    "Browse": "Explorar",
+    "New in": "Nuevo",
+    "Just added": "Recién llegado",
+    "One of a kind": "Único",
+    "Open": "Abierto",
+    "Pickup": "Recoger",
+    "21+ ID": "ID 21+",
+    "at pickup": "al recoger",
+    "each": "cada uno",
+    "or more": "o más",
+    "the counter": "el mostrador",
+    "to enter": "para entrar",
+    "until 9 PM": "hasta las 9 PM",
+    "Mon – Sat": "Lun – Sáb",
+    "Sunday": "Domingo",
+
+    # ---- the front door -----------------------------------------------------
+    "Welcome to Smokers Paradise": "Bienvenido a Smokers Paradise",
+    "Enter the shop": "Entrar a la tienda",
+    "I’m under 21": "Soy menor de 21",
+    "You have to be 21 to be in here, same rule as the front door.":
+        "Tienes que ser mayor de 21 para estar aquí, la misma regla que en la puerta.",
+    "Come back when you’re 21. Nothing here is for sale to you.":
+        "Regresa cuando cumplas 21. Aquí no hay nada a la venta para ti.",
+    "Pickup only. Valid 21+ ID required at the counter.":
+        "Solo para recoger. Se pide identificación válida de 21+ en el mostrador.",
+    "Pickup only at 922 N Grand Ave Ste B. Nothing ships and nothing gets delivered.":
+        "Solo se recoge en 922 N Grand Ave Ste B. No enviamos nada ni hacemos entregas.",
+
+    # ---- the shop's own words ----------------------------------------------
+    "Nogales’s smoke shop for the everyday run and the hard-to-find flavor.":
+        "La smoke shop de Nogales, para la vuelta de siempre y para el sabor difícil de encontrar.",
+    "We are on North Grand in Nogales, open seven days, and we stock the shelf the way our regulars ask for it.":
+        "Estamos en North Grand en Nogales, abiertos los siete días, y surtimos el estante como nos lo piden los clientes de siempre.",
+    "Women-owned and family-run. If you cannot find it on the shelf, ask us at the counter and we will get it in or tell you straight that we cannot.":
+        "Somos un negocio de mujeres y de familia. Si no lo encuentras en el estante, pregúntanos en el mostrador y te lo conseguimos, o te decimos de frente que no se puede.",
+    "The same faces most days, and we will walk you through anything on the shelf.":
+        "Las mismas caras casi todos los días, y te explicamos cualquier cosa del estante.",
+    "Two hundred and ten reviews at 4.9 stars, and in August we were voted the Best Smoke Shop in Santa Cruz County. We read every review and we answer them ourselves.":
+        "Doscientas diez reseñas con 4.9 estrellas, y en agosto nos eligieron la Mejor Smoke Shop del condado de Santa Cruz. Leemos cada reseña y las contestamos nosotros mismos.",
+    "We know you have choices, and the fact that you choose to shop with us means everything.":
+        "Sabemos que tienes dónde escoger, y que nos escojas a nosotros lo es todo.",
+    "If it is not on this list, ask us anyway. We can usually get it.":
+        "Si no está en esta lista, pregúntanos de todos modos. Casi siempre lo conseguimos.",
+    "Ask for any of it at the counter.": "Pide cualquiera de estos en el mostrador.",
+    "The quote above is a customer’s own words, left on our Google page.":
+        "Lo de arriba son las palabras de un cliente, dejadas en nuestra página de Google.",
+    "Our sign on North Grand.": "Nuestro letrero en North Grand.",
+    "Our shop, our sign and the people in it": "La tienda, el letrero y la gente que está adentro",
+    "How we run the shop": "Cómo llevamos la tienda",
+    "Free parking in our lot on North Grand": "Estacionamiento gratis en nuestro lote de North Grand",
+    "Local. Open seven days. Fully stocked.": "Local. Abierto los siete días. Bien surtido.",
+    "Open 7 days": "Abierto los 7 días",
+    "Open Seven Days": "Abiertos los siete días",
+    "Thank you, Nogales.": "Gracias, Nogales.",
+    "Best Smoke Shop": "Mejor Smoke Shop",
+    "Best Smoke Shop 2026": "Mejor Smoke Shop 2026",
+    "2026 Best Smoke Shop": "Mejor Smoke Shop 2026",
+    "2026 Best Smoke Shop in Santa Cruz County":
+        "Mejor Smoke Shop 2026 del condado de Santa Cruz",
+    "Best of Santa Cruz County": "Lo mejor del condado de Santa Cruz",
+    "Santa Cruz County": "Condado de Santa Cruz",
+
+    # ---- headings -----------------------------------------------------------
+    "Today’s Deals": "Ofertas de hoy",
+    "Today’s deals": "Ofertas de hoy",
+    "All Offers": "Todas las ofertas",
+    "Shop by Category": "Compra por categoría",
+    "Shop by category": "Compra por categoría",
+    "Shop by brand": "Compra por marca",
+    "Shop All": "Ver todo",
+    "View All": "Ver todo",
+    "View Today’s Deals": "Ver las ofertas de hoy",
+    "Our Store & Crew": "La tienda y el equipo",
+    "OUR STORE & CREW": "LA TIENDA Y EL EQUIPO",
+    "Our store": "La tienda",
+    "Our shelves": "Nuestros estantes",
+    "What We Carry": "Lo que manejamos",
+    "What We Have Going On": "Lo que tenemos",
+    "In the Shop": "En la tienda",
+    "In the shop": "En la tienda",
+    "Meet the Crew": "Conoce al equipo",
+    "Behind the counter": "Detrás del mostrador",
+    "Come By": "Pásale",
+    "Visit the Shop": "Visita la tienda",
+    "Events and raffles": "Eventos y rifas",
+    "New In Store": "Nuevo en la tienda",
+    "New Arrivals": "Recién llegados",
+    "New arrivals and weekly offers": "Recién llegados y ofertas de la semana",
+    "From Our Feed": "De nuestro feed",
+    "From our feed": "De nuestro feed",
+    "Follow us": "Síguenos",
+    "Picked at the counter": "Escogidos en el mostrador",
+    "Paradise Picks": "Escogidos de Paradise",
+    "Paradise Glass": "Paradise Glass",
+    "Save in store": "Ahorra en la tienda",
+    "Your Bag": "Tu bolsa",
+    "Your Account": "Tu cuenta",
+    "Rated 4.9 on Google": "4.9 en Google",
+    "Google reviews": "Reseñas de Google",
+    "Google review": "Reseña de Google",
+    "Read all 210 reviews": "Lee las 210 reseñas",
+    "Write a review": "Escribe una reseña",
+    "210 Google reviews": "210 reseñas de Google",
+
+    # ---- the shelves --------------------------------------------------------
+    "Disposable Vapes": "Vapes desechables",
+    "Vape Hardware": "Equipo de vape",
+    "E-Liquid": "E-liquid",
+    "Nicotine Pouches": "Bolsitas de nicotina",
+    "Puffco & Dab": "Puffco y dab",
+    "Water Pipes": "Pipas de agua",
+    "Water Pipes, Rigs & Hand Pipes": "Pipas de agua, rigs y pipas de mano",
+    "Dab Rigs": "Dab rigs",
+    "Hand Pipes": "Pipas de mano",
+    "Glass Parts & Accessories": "Piezas y accesorios de vidrio",
+    "Glass Parts": "Piezas de vidrio",
+    "Rolling Papers": "Papel para enrollar",
+    "Wraps & Cigars": "Wraps y puros",
+    "Hookah & Shisha": "Hookah y shisha",
+    "Gear & Cleaning": "Accesorios y limpieza",
+    "Snacks, Drinks & Treats": "Snacks, bebidas y dulces",
+    "Snacks & Drinks": "Snacks y bebidas",
+    "Exotic Snacks": "Snacks exóticos",
+    "Disposable Brands": "Marcas de desechables",
+    "Glass": "Vidrio",
+    "E-Juice & Devices": "E-juice y equipos",
+    "Disposables": "Desechables",
+    "Mushroom Chocolate": "Chocolate de hongo",
+    "Love": "Love",
+    "Torches": "Sopletes",
+    "Rolling Trays": "Charolas",
+    "Vaporizers": "Vaporizadores",
+    "Papers & Wraps": "Papeles y wraps",
+    "CBD": "CBD",
+    "Kratom": "Kratom",
+    "Spiritual": "Espiritual",
+    "Silicone": "Silicón",
+    "Scales": "Básculas",
+    "Raffles": "Rifas",
+    "Raffle": "Rifa",
+    "Beakers, rigs": "Beakers y rigs",
+    "and spoons": "y spoons",
+    "Grinders, trays, torches": "Grinders, charolas, sopletes",
+    "Everything in the shop": "Todo lo de la tienda",
+    "On the shelf in Nogales": "En el estante en Nogales",
+
+    # ---- ordering ahead -----------------------------------------------------
+    "Order ahead.": "Pide por adelantado.",
+    "Order ahead, pick up at the counter": "Pide por adelantado y recoge en el mostrador",
+    "Build the bag here, collect it at the counter.":
+        "Arma la bolsa aquí y recógela en el mostrador.",
+    "Start an order": "Empezar un pedido",
+    "Browse Before You Arrive": "Mira antes de venir",
+    "Browse the shelf before you drive over, save what you want, and send a pickup request instead of standing at the counter working through every option.":
+        "Mira el estante antes de venir, guarda lo que quieras y manda tu pedido en lugar de estar en el mostrador viendo opción por opción.",
+    "Send the request ahead and the counter has it bagged when you walk in.":
+        "Manda el pedido antes y el mostrador ya lo tiene embolsado cuando llegas.",
+    "Order ahead and pick it up at the counter. Staff confirm your order when they bag it.":
+        "Pide por adelantado y recoge en el mostrador. El personal confirma tu pedido cuando lo embolsa.",
+    "We don’t ship and we don’t deliver, and nothing is paid for in the app. You pay at the counter when you collect.":
+        "No enviamos ni entregamos a domicilio, y aquí no se paga nada. Pagas en el mostrador cuando recoges.",
+    "Selection and prices can change at the shop, and the register is the final word. Nothing here is a live stock count.":
+        "La selección y los precios pueden cambiar en la tienda, y la caja tiene la última palabra. Esto no es un inventario en vivo.",
+    "Pickup requests land on a counter screen. The register still rings the sale and stays the final word on price.":
+        "Los pedidos llegan a una pantalla en el mostrador. La caja sigue cobrando la venta y tiene la última palabra en el precio.",
+    "Nothing in the bag yet": "Todavía no hay nada en la bolsa",
+    "Once something is in here, the counter has it bagged in about ten minutes.":
+        "En cuanto haya algo aquí, el mostrador lo tiene embolsado en unos diez minutos.",
+    "Add one more": "Agrega uno más",
+    "Pickup code": "Código de recogida",
+    "Show this to find your order fast": "Muestra esto para encontrar tu pedido rápido",
+    "Name and phone": "Nombre y teléfono",
+    "Used for pickup and your ready text": "Para recoger y para el mensaje de listo",
+    "No number on file": "No hay número guardado",
+    "Text me when it’s bagged": "Mándame mensaje cuando esté listo",
+    "Call the shop · (520) 338-2119": "Llama a la tienda · (520) 338-2119",
+    "Get Directions": "Cómo llegar",
+    "Directions": "Cómo llegar",
+    "See the shop": "Ver la tienda",
+
+    # ---- offers and events --------------------------------------------------
+    "Mix and match": "Combina como quieras",
+    "or 3 for $12": "o 3 por $12",
+    "Twenty-five thousand puffs a pod. Take any two flavors.":
+        "Veinticinco mil puffs por pod. Llévate dos sabores, los que quieras.",
+    "Twenty-five thousand puffs a pod. Mix the flavors however you like.":
+        "Veinticinco mil puffs por pod. Combina los sabores como quieras.",
+    "Shop Off-Stamp": "Ver Off-Stamp",
+    "Shop Puffco": "Ver Puffco",
+    "Shop glass": "Ver el vidrio",
+    "Shop the bars": "Ver las barras",
+    "Shop the shelf": "Ver el estante",
+    "Browse the shelf": "Ver el estante",
+    "Browse pods": "Ver los pods",
+    "Browse new vapes": "Ver los vapes nuevos",
+    "See the flavors": "Ver los sabores",
+    "See the glass": "Ver el vidrio",
+    "See it": "Verlo",
+    "Keep browsing": "Seguir viendo",
+    "21+ only.": "Solo 21+.",
+    "21+ only. Valid ID at pickup.": "Solo 21+. Identificación válida al recoger.",
+    "21+ only. Valid ID on every pickup": "Solo 21+. Identificación válida en cada recogida",
+    "In store only. 21+ only.": "Solo en la tienda. Solo 21+.",
+    "In store only. One spin per visit.": "Solo en la tienda. Un giro por visita.",
+    "Spin the wheel": "Gira la ruleta",
+    "Spin-N-Win": "Gira y gana",
+    "Spend $15 or more and spin the prize wheel at the counter.":
+        "Gasta $15 o más y gira la ruleta de premios en el mostrador.",
+    "Spend $10 or more to get one raffle entry. Prizes come off our own shelf.":
+        "Gasta $10 o más y entras a la rifa. Los premios salen de nuestro propio estante.",
+    "Spend $10 or more and we’ll write your name on a ticket. One entry per visit.":
+        "Gasta $10 o más y apuntamos tu nombre en un boleto. Una entrada por visita.",
+    "Draw at": "Sorteo el",
+    "Spring Celebration Fest": "Spring Celebration Fest",
+    "Local vendors, live music, free tacos, a mechanical bull and 420 deals in our lot on Grand. Free entry, and a free raffle ticket at the door.":
+        "Vendedores locales, música en vivo, tacos gratis, toro mecánico y ofertas del 420 en nuestro lote de Grand. Entrada gratis y un boleto de rifa en la puerta.",
+    "Toy Drive": "Colecta de juguetes",
+    "Bring a toy for a child in need and take a free keychain with any purchase.":
+        "Trae un juguete para un niño y llévate un llavero gratis con cualquier compra.",
+    "Car meet": "Car meet",
+    "First meet of the year in our lot. New members welcome, come through.":
+        "El primer meet del año en nuestro lote. Los nuevos son bienvenidos, pásense.",
+    "Follow us for the next one": "Síguenos para la próxima",
+    "New flavors, new glass and every raffle go up on our Instagram first.":
+        "Los sabores nuevos, el vidrio nuevo y cada rifa salen primero en nuestro Instagram.",
+
+    # ---- helping you choose -------------------------------------------------
+    "Find Your Fit": "Encuentra lo tuyo",
+    "Find My Match": "Encuentra lo mío",
+    "Not sure what to choose?": "¿No sabes qué escoger?",
+    "Three quick questions and we’ll narrow the shelf to what suits you.":
+        "Tres preguntas rápidas y te reducimos el estante a lo que te va.",
+    "Tell us what you like. We’ll narrow the shelf.":
+        "Dinos qué te gusta y te reducimos el estante.",
+    "Ask For It By Name": "Pídelo por su nombre",
+    "Search brands, devices, flavors, glass and accessories from your phone.":
+        "Busca marcas, equipos, sabores, vidrio y accesorios desde tu teléfono.",
+
+    # ---- texts and the list -------------------------------------------------
+    "Deals by text": "Ofertas por mensaje",
+    "Deal alerts by text": "Avisos de ofertas por mensaje",
+    "Order alerts": "Avisos de pedidos",
+    "One message when a real deal lands. Not a newsletter.":
+        "Un mensaje cuando de verdad cae una oferta. No es un boletín.",
+    "Message and data rates may apply. Reply STOP to quit. 21+ only. We never sell your number.":
+        "Pueden aplicar cargos por mensaje y datos. Responde STOP para salir. Solo 21+. Nunca vendemos tu número.",
+    "Join": "Únete",
+    "Keep it running": "Mantenerlo",
+    "Reset demo": "Reiniciar el demo",
+    "Clears the bag, orders and saved offers": "Borra la bolsa, los pedidos y las ofertas guardadas",
+    "Products on this menu contain nicotine or are intended for adults 21 and over. Nicotine is an addictive chemical. A valid ID is checked at every pickup.":
+        "Los productos de este menú contienen nicotina o son para adultos de 21 años o más. La nicotina es una sustancia adictiva. Se revisa identificación válida en cada recogida.",
+}
+
+# Already Spanish in the build. With a switch in the header the app has to be
+# able to go the other way too, or English mode keeps three Spanish lines in
+# the ticker and one on the front door.
+EN = {
+    "Pide y recoge en el mostrador": "Order ahead, pick up at the counter",
+    "Solo 21+. Identificación válida en cada recogida": "21+ only. Valid ID on every pickup",
+    "Encuentra todo para tus necesidades de humo, a los mejores precios.":
+        "Everything for your smoke necessities, at the best prices.",
+    "Tienes que ser mayor de 21, la misma regla que en la puerta.":
+        "You have to be 21, same rule as the front door.",
+    "Soy menor de 21": "I’m under 21",
+    "Pickup · Recoger": "Pickup · Recoger",
+    "Se habla español. Te atendemos en los dos idiomas, en el mostrador y aquí en la app.":
+        "We speak Spanish. We will serve you in either language, at the counter and here in the app.",
+}
+
+# A second pass, written after running the app in Spanish and listing every
+# line that was still English on screen. Kept separate so the first pass stays
+# readable: this one is the sweepings, headline fragments and the ticker.
+import os
+_more = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_es_more.json')
+if os.path.exists(_more):
+    ES.update(json.load(open(_more, encoding='utf-8')))
+
+if __name__ == '__main__':
+    json.dump({'es': ES, 'en': EN},
+              open('/root/work/smokers-paradise-demo/data_lang.json', 'w'),
+              ensure_ascii=False, indent=1)
+    print('%d english->spanish, %d spanish->english' % (len(ES), len(EN)))

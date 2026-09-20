@@ -1,0 +1,25 @@
+import asyncio, os
+from playwright.async_api import async_playwright
+os.makedirs('/tmp/spfin2',exist_ok=True)
+async def m():
+    async with async_playwright() as pw:
+        br=await pw.chromium.launch(); pg=await br.new_page(viewport={'width':390,'height':844},device_scale_factor=2)
+        await pg.route('**/*', lambda r: r.abort() if not r.request.url.startswith('file:') else r.continue_())
+        await pg.goto('file:///root/work/smokers-paradise-demo/build/index.html'); await pg.wait_for_timeout(1700)
+        await pg.evaluate("document.querySelector('#gateNo').click()"); await pg.wait_for_timeout(700)
+        await pg.screenshot(path='/tmp/spfin2/0-gate.png')
+        await pg.evaluate("document.querySelector('#gateOops').click(); document.querySelector('#gateYes').click()")
+        await pg.wait_for_timeout(1900)
+        await pg.screenshot(path='/tmp/spfin2/1-entrance.png')
+        await pg.evaluate("hideInter(); go('home'); clearInterval(heroT)"); await pg.wait_for_timeout(1500)
+        await pg.evaluate("heroTo(1); clearInterval(heroT)"); await pg.wait_for_timeout(1400)
+        await pg.locator('#hero').screenshot(path='/tmp/spfin2/2-lostmary.png')
+        await pg.evaluate("heroTo(2); clearInterval(heroT)"); await pg.wait_for_timeout(1400)
+        await pg.locator('#hero').screenshot(path='/tmp/spfin2/3-geekbar.png')
+        await pg.evaluate("go('cat','exotic')"); await pg.wait_for_timeout(1600)
+        await pg.screenshot(path='/tmp/spfin2/4-tre.png')
+        await pg.evaluate("go('account')"); await pg.wait_for_timeout(1300)
+        await pg.evaluate("()=>{const e=document.querySelector('[data-tog]'); if(e) e.scrollIntoView({block:'center'})}")
+        await pg.wait_for_timeout(900); await pg.screenshot(path='/tmp/spfin2/5-account.png')
+        await br.close()
+asyncio.run(m())
