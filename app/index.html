@@ -15709,7 +15709,22 @@ function persist(){
   if(typeof navigator === 'undefined' || !navigator.serviceWorker) return;
   if(!/^https?:$/.test(location.protocol)) return;   /* file:// needs none */
   window.addEventListener('load', function(){
-    try{ navigator.serviceWorker.register('/sw.js', {scope: '/'}) }catch(e){}
+    /* Relative, and the scope left to default to whatever directory this
+       page is in. Absolute '/sw.js' is right only when the app is served
+       from the root of a domain; on a project page like
+       borderline-ai.github.io/smokers-paradise/ it asks the domain root for
+       a file that is not there, and a scope of '/' is refused outright.
+
+       The catch matters as much as the path. register() returns a promise,
+       so a try/catch around it catches nothing and the rejection lands as an
+       unhandled error on every page load. A host with no service worker
+       should simply have no service worker. */
+    /* No API base means no shop: this is the standalone walkthrough, and
+       there is nothing to keep running through an outage. */
+    if(!window.SP_API) return;
+    try{
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    }catch(e){}
   });
 })();
 
