@@ -36,14 +36,28 @@ binding = "DB"
 database_name = "smokers-paradise"
 # Filled in by `npm run db:create`. It is not a secret; it is an account-scoped
 # identifier and it belongs in version control so a redeploy is reproducible.
-database_id = "PASTE_THE_ID_FROM_db:create"
+database_id = "971c97fa-a977-46d5-bdb5-e86de42243c8"
 
 # Photographs uploaded from the counter. The pictures that ship with the app
 # are static assets (stage 172); this is for the ones the shop takes itself.
-# Create it with:  npx wrangler r2 bucket create smokers-paradise-media
-[[r2_buckets]]
-binding = "MEDIA"
-bucket_name = "smokers-paradise-media"
+#
+# COMMENTED OUT BECAUSE R2 IS NOT ENABLED ON THIS ACCOUNT. Cloudflare asks for
+# a card before it will turn R2 on, even on its free tier, and the shop does
+# not need it to open: photographs get in through `npm run import --photos`,
+# which puts them in app/img and ships them as static assets.
+#
+# Without the binding, POST /api/staff/media answers
+#   503 "No photo storage is configured on this service"
+# which is the honest failure — the counter's photo button says so rather than
+# appearing to work. src/media.js checks for env.MEDIA before anything else.
+#
+# To turn it on: enable R2 in the dashboard, then
+#   npx wrangler r2 bucket create smokers-paradise-media
+# and uncomment the three lines below and redeploy.
+#
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "smokers-paradise-media"
 
 [triggers]
 # Drains the CRM queue. A webhook that was down when somebody joined should
