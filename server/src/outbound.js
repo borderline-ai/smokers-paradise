@@ -18,15 +18,16 @@
    ===================================================================== */
 
 import { nowIso } from './http.js';
+import * as GHL from './ghl.js';
 
 const BACKOFF_MIN = [0, 1, 5, 20, 60, 180, 360];   /* minutes, by try count */
 const MAX_TRIES = BACKOFF_MIN.length;
 
-export async function enqueue(env, shop, url, payload) {
+export async function enqueue(env, shop, url, payload, transport = 'webhook') {
   if (!url) return;
   await env.DB.prepare(
-    'INSERT INTO outbound (shop, url, body, tries, next_try, created) VALUES (?1,?2,?3,0,?4,?4)'
-  ).bind(shop, url, JSON.stringify(payload), nowIso()).run();
+    'INSERT INTO outbound (shop, transport, url, body, tries, next_try, created) VALUES (?1,?2,?3,?4,0,?5,?5)'
+  ).bind(shop, transport, url, JSON.stringify(payload), nowIso()).run();
 }
 
 /* Drains what is due. Called after a join (so the common case is instant) and
@@ -43,13 +44,23 @@ export async function drain(env, limit = 25) {
   for (const row of (due.results || [])) {
     let okish = false, err = '';
     try {
-      const r = await fetch(row.url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: row.body
-      });
-      okish = r.ok;
-      if (!okish) err = 'HTTP ' + r.status;
+      if (row.transport === 'ghl') {
+        /* The location id rides in `url` so the row is self-contained: a
+           retry three hours later must not depend on config that has since
+           been edited. */
+        const payload = JSON.parse(row.body);
+        const res = await GHL.send(env, { ghlLocationId: row.url }, payload.type, payload);
+        okish = res.ok;
+        if (!okish) err = String(res.detail || '').slice(0, 200);
+      } else {
+        const r = await fetch(row.url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: row.body
+        });
+        okish = r.ok;
+        if (!okish) err = 'HTTP ' + r.status;
+      }
     } catch (e) {
       err = String((e && e.message) || e).slice(0, 200);
     }

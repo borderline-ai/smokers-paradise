@@ -29,6 +29,11 @@ export const DEFAULT_REWARDS = {
      it, not by a test — there is one now. */
   perk: 'A birthday email with something on us, every year.',
   endpoint: '',
+  /* 'webhook' posts at `endpoint`, which GHL bills per execution. 'ghl' goes
+     through the Contacts API and adds a tag, which is a standard trigger and
+     costs nothing. Both are kept so a shop can switch back without a deploy. */
+  transport: 'webhook',
+  ghlLocationId: '',
   terms: 'One membership per phone number. Visits are added at the counter when you pay. 21+ only. The register is the final word on any discount.'
 };
 
@@ -69,6 +74,19 @@ export function cleanRewards(body, current) {
   if ('name' in body) out.name = str(body.name, 60) || current.name;
   if ('reward' in body) out.reward = str(body.reward, 80) || current.reward;
   if ('perk' in body) out.perk = str(body.perk, 200);
+  if ('ghlLocationId' in body) out.ghlLocationId = str(body.ghlLocationId, 60);
+  if ('transport' in body) {
+    const t = str(body.transport, 20);
+    if (t !== 'webhook' && t !== 'ghl') {
+      return { error: 'The transport has to be webhook or ghl.' };
+    }
+    /* Switching to the API path without a location id would silently send
+       nothing, which is the failure mode this whole codebase keeps refusing. */
+    if (t === 'ghl' && !(out.ghlLocationId || current.ghlLocationId)) {
+      return { error: 'Set the GoHighLevel location id before switching to the API.' };
+    }
+    out.transport = t;
+  }
   if ('terms' in body) out.terms = str(body.terms, 600) || current.terms;
   if ('endpoint' in body) {
     const e = str(body.endpoint, 400);

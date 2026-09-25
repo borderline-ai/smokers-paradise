@@ -51,9 +51,18 @@ export const EVENTS = {
    not wait on somebody else's webhook, and the counter marking a bag ready
    should not either. outbound.js does the retries with backoff. */
 export function notify(env, ctx, shop, rule, type, payload) {
-  if (!rule || !rule.endpoint) return false;
+  if (!rule) return false;
+  const viaApi = rule.transport === 'ghl';
+  /* Either a webhook URL to post at, or a location id to upsert into. With
+     neither there is nowhere to send and nothing is queued — a shop that has
+     not connected anything yet is the commonest state on day one and must not
+     be an error. */
+  const target = viaApi ? rule.ghlLocationId : rule.endpoint;
+  if (!target) return false;
+
   const body = Object.assign({ type, shop, at: nowIso() }, payload);
-  const work = enqueue(env, shop, rule.endpoint, body).then(() => drain(env, 5));
+  const work = enqueue(env, shop, target, body, viaApi ? 'ghl' : 'webhook')
+    .then(() => drain(env, 5));
   if (ctx && ctx.waitUntil) ctx.waitUntil(work.catch(() => {}));
   else work.catch(() => {});
   return true;
@@ -84,7 +93,8 @@ export const memberFields = m => ({
      birthday emails. That is the entire reason `birthday_sent` exists.
    --------------------------------------------------------------------- */
 export async function birthdaySweep(env, shop, rule) {
-  if (!rule || !rule.endpoint) return { raised: 0, reason: 'no endpoint' };
+  const target = rule && (rule.transport === 'ghl' ? rule.ghlLocationId : rule.endpoint);
+  if (!target) return { raised: 0, reason: 'nowhere to send' };
 
   /* The shop's own clock, not UTC. A birthday that fires at 5pm the day
      before is worse than one that does not fire at all. */

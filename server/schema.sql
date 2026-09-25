@@ -263,6 +263,11 @@ CREATE INDEX IF NOT EXISTS pin_attempts_who ON pin_attempts (shop, who, at);
 CREATE TABLE IF NOT EXISTS outbound (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   shop     TEXT    NOT NULL,
+  -- 'webhook' posts `body` at `url`. 'ghl' upserts the contact through the
+  -- GoHighLevel API and adds a tag, where `url` carries the location id. Both
+  -- go through the same queue so a failure of either is visible in one place
+  -- and retried by the same backoff.
+  transport TEXT   NOT NULL DEFAULT 'webhook',
   url      TEXT    NOT NULL,
   body     TEXT    NOT NULL,
   tries    INTEGER NOT NULL DEFAULT 0,

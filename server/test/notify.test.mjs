@@ -21,6 +21,7 @@ const HOOK = 'https://services.leadconnectorhq.com/hooks/abc123';
 
 function fresh() {
   const env = { DB: makeD1(SCHEMA), SHOP: 'smokers-paradise', STAFF_PIN: '7413',
+                GHL_TOKEN: 'test-token',
                 ASSETS: { fetch: async () => new Response('', { status: 404 }) } };
   const jar = new Map();
   const call = async (path, init = {}) => {
@@ -227,4 +228,116 @@ test('a webhook that is down leaves the message queued, not dropped', async () =
   assert.equal(row.n, 1, 'still queued');
   assert.equal(row.tries, 1, 'one failed attempt on record');
   assert.match(row.err, /500/, 'and why it failed');
+});
+
+/* =====================================================================
+   THE FREE PATH: CONTACTS API AND A TAG, INSTEAD OF A BILLED WEBHOOK
+   ===================================================================== */
+
+test('switching to the API without a location id is refused, not silently ignored', async () => {
+  /* Accepting it would mean a shop that thinks it is connected and is sending
+     nothing. That failure mode is the one this codebase keeps refusing. */
+  const { call } = fresh();
+  await signIn(call);
+  const r = await call('/api/staff/config', { method: 'POST',
+    body: { rewards: { transport: 'ghl' } } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.detail, /location id/);
+});
+
+test('a transport that is not one of the two is refused', async () => {
+  const { call } = fresh();
+  await signIn(call);
+  const r = await call('/api/staff/config', { method: 'POST',
+    body: { rewards: { transport: 'carrier-pigeon', ghlLocationId: 'LOC1' } } });
+  assert.equal(r.status, 400);
+});
+
+test('on the API path a join upserts a contact and tags it', async () => {
+  const { call } = fresh();
+  await signIn(call);
+  await call('/api/staff/config', { method: 'POST',
+    body: { rewards: { ghlLocationId: 'LOC1', transport: 'ghl' } } });
+
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, init) => {
+    const url = String(u);
+    if (url.includes('leadconnectorhq')) {
+      seen.push({ url, method: init.method, body: JSON.parse(init.body),
+                  auth: (init.headers || {})['Authorization'] });
+      if (url.endsWith('/contacts/upsert')) {
+        return new Response(JSON.stringify({ contact: { id: 'CT123' } }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return real(u, init);
+  };
+  try {
+    await call('/api/members', { method: 'POST', body: {
+      first: 'Ana', phone: '5205550134', email: 'ana@example.com',
+      emailOk: true, birthday: '3-14' } });
+  } finally { globalThis.fetch = real; }
+
+  const upsert = seen.find(s => s.url.endsWith('/contacts/upsert'));
+  assert.ok(upsert, 'the contact was written');
+  assert.equal(upsert.body.locationId, 'LOC1');
+  assert.equal(upsert.body.firstName, 'Ana');
+  assert.equal(upsert.body.email, 'ana@example.com');
+  assert.equal(upsert.body.phone, '+15205550134');
+  /* Month and day only. The app never collects a year and this must not be
+     the place that invents one — 1900 is a placeholder, not a birth year. */
+  assert.equal(upsert.body.dateOfBirth, '1900-03-14');
+
+  /* Removed then added, so a member earning a SECOND reward is a second
+     trigger. "Contact Tag" fires on add; re-adding a tag already present
+     changes nothing and no workflow runs. */
+  const tagCalls = seen.filter(s => s.url.includes('/tags'));
+  assert.deepEqual(tagCalls.map(t => t.method), ['DELETE', 'POST']);
+  assert.deepEqual(tagCalls[1].body.tags, ['sp-member']);
+  assert.match(tagCalls[1].auth, /^Bearer /);
+});
+
+test('an event with no email and no phone cannot become a contact, and says so', async () => {
+  const { env } = fresh();
+  const { send } = await import('../src/ghl.js');
+  const r = await send({ GHL_TOKEN: 'x' }, { ghlLocationId: 'LOC1' },
+    'member.joined', { first: 'Nobody' });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /no email and no phone/);
+});
+
+test('a missing token is reported as a missing token, not as a failed send', async () => {
+  const { send } = await import('../src/ghl.js');
+  const r = await send({}, { ghlLocationId: 'LOC1' }, 'member.joined',
+    { first: 'Ana', email: 'a@b.com' });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /GHL_TOKEN/);
+});
+
+test('GHL refusing the contact leaves the event queued with the reason', async () => {
+  const { call, env } = fresh();
+  await signIn(call);
+  await call('/api/staff/config', { method: 'POST',
+    body: { rewards: { ghlLocationId: 'LOC1', transport: 'ghl' } } });
+
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, init) => {
+    if (String(u).includes('leadconnectorhq')) {
+      return new Response('{"message":"Invalid token"}', { status: 401,
+        headers: { 'content-type': 'application/json' } });
+    }
+    return real(u, init);
+  };
+  try {
+    await call('/api/members', { method: 'POST', body: {
+      first: 'Ana', phone: '5205550134', email: 'ana@example.com', emailOk: true } });
+  } finally { globalThis.fetch = real; }
+
+  const row = await env.DB.prepare(
+    'SELECT transport, tries, last_err FROM outbound WHERE sent_at IS NULL').first();
+  assert.equal(row.transport, 'ghl');
+  assert.equal(row.tries, 1);
+  assert.match(row.last_err, /401/, 'the reason is kept, because a scope or a token is what went wrong');
 });
