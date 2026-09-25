@@ -12,7 +12,7 @@ naturalWidth > 0 — not merely an <img> tag with a src on it.
 import pathlib
 from playwright.sync_api import sync_playwright
 
-FILE = pathlib.Path('/root/work/smokers-paradise-demo/build/index.html').as_uri()
+FILE = pathlib.Path(__import__('sppath').APP).as_uri()
 res = []
 def ck(name, cond, detail=''):
     res.append((name, bool(cond), detail))

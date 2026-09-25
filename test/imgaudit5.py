@@ -16,7 +16,7 @@ import asyncio
 import json
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 
 SCREENS = [('home', "go('home')"), ('deals', "go('deals')"), ('store', "go('store')"),
            ('all', "go('all')"), ('account', "go('account')"), ('bag', "go('orders')")]

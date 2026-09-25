@@ -18,8 +18,8 @@ import sys
 from playwright.sync_api import sync_playwright
 
 FILE = pathlib.Path(
-    '/root/work/smokers-paradise-demo/build/index.html').as_uri()
-OUT = '/root/work/smokers-paradise-demo/shots/qa'
+    __import__('sppath').APP).as_uri()
+OUT = __import__('sppath').SHOTS
 WIDTHS = [int(a) for a in sys.argv[1:]] or [390]
 
 # name -> a function body run in the page, plus how long to settle

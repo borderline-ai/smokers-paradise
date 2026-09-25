@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+# A copy of app/index.html, made by `npm run build`. Eleven megabytes of it,
+# and it is not a source file — the source is app/index.html and the stages
+# that produced it.
+public/
+*.db
+*.db-journal
+# Photographs uploaded through the local server. The bucket in production.
+media/

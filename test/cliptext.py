@@ -9,7 +9,7 @@ paints it, and that box is not a scroller. Horizontal rails and real scrollers
 are excluded, the same way cropcheck excludes them."""
 import asyncio, json
 from playwright.async_api import async_playwright
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 
 PROBE = """() => {
   const out=[];

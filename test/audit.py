@@ -9,7 +9,7 @@ headline that contradicts the product beside it.
 import re, pathlib
 from playwright.sync_api import sync_playwright
 
-SRC = pathlib.Path('/root/work/smokers-paradise-demo/build/index.html')
+SRC = pathlib.Path(__import__('sppath').APP)
 FILE = SRC.as_uri()
 res = []
 def ck(name, cond, detail=''):
