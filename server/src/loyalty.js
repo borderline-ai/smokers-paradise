@@ -235,3 +235,31 @@ async function receipt(env, txnId) {
     } : null
   };
 }
+
+/* ---------------------------------------------------------------------
+   WHO CREDITED IT.
+
+   `transactions.created_by` is NOT NULL and references staff, because on a
+   spend-based programme an employee types the dollar amount — which means an
+   employee can type $500 instead of $50 and hand a friend a free vape. The
+   audit trail is the control that makes the programme safe to run.
+
+   Today there is one shared PIN, so every write is attributed to a single
+   'Counter' row. That is honest about what the service actually knows: it
+   knows a counter did this, not which person. Per-staff accounts turn the
+   same column into a real name without a migration — the column is already
+   there and already pointing at the right table.
+
+   Do not ship the spend-based programme to a shop with more than one
+   employee until that upgrade lands.
+   --------------------------------------------------------------------- */
+export async function counterStaffId(env, shop) {
+  const found = await env.DB
+    .prepare("SELECT id FROM staff WHERE shop = ?1 AND name = 'Counter'").bind(shop).first();
+  if (found) return found.id;
+  const made = await env.DB.prepare(
+    `INSERT INTO staff (shop, name, email, role, pin_hash, pin_salt, active, created_at)
+     VALUES (?1, 'Counter', '', 'employee', '', '', 1, ?2) RETURNING id`
+  ).bind(shop, nowIso()).first();
+  return made.id;
+}

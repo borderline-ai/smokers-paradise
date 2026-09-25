@@ -27,6 +27,8 @@ import * as O from './orders.js';
 import * as C from './catalog.js';
 import * as Sub from './subscribers.js';
 import * as Media from './media.js';
+import * as Points from './loyalty.js';
+import { counterStaffId } from './loyalty.js';
 import * as Out from './outbound.js';
 import { notify, EVENTS, memberFields, birthdaySweep } from './notify.js';
 
@@ -153,7 +155,43 @@ async function handleApi(request, env, ctx, url, shop) {
 
     /* the rewards counter */
     if (seg[1] === 'members' && seg.length === 2 && method === 'GET') {
-      return M.lookup(env, shop, url.searchParams, rule);
+      const res = await M.lookup(env, shop, url.searchParams, rule);
+      if (res.status !== 200) return res;
+      const body = await res.json();
+      try {
+        const m = await env.DB
+          .prepare('SELECT id, age_verified_at FROM members WHERE shop = ?1 AND code = ?2')
+          .bind(shop, str(body.member.code, 12)).first();
+        if (m) {
+          body.points = await Points.standing(env, shop, m.id);
+          /* The counter has to know before it offers a reward, not after. */
+          body.member.ageVerified = !!m.age_verified_at;
+        }
+      } catch (e) { /* no points programme here yet */ }
+      return ok(body);
+    }
+
+    /* THE ONE CALL THE COUNTER MAKES. Rings the sale, credits points on what
+       is actually tendered, and optionally spends a tier against that same
+       sale. One call, one idempotency key, one confirm at the till. */
+    if (seg[1] === 'checkout' && method === 'POST') {
+      const staffId = await counterStaffId(env, shop);
+      const pricing2 = await readConfig(env, shop, 'points', {
+        points_per_dollar: 10, min_tender_cents: 1, max_txn_cents: 30000
+      });
+      return Points.checkout(env, shop, staffId, body, pricing2.value);
+    }
+
+    /* Somebody looked at an ID across the counter. Recorded once, and it is
+       what unlocks redeeming — joining on a phone verifies nobody. */
+    if (seg[1] === 'members' && seg[3] === 'verify' && method === 'POST') {
+      const staffId = await counterStaffId(env, shop);
+      const r = await env.DB.prepare(
+        `UPDATE members SET age_verified_at = ?3, age_verified_by = ?4,
+                            age_verify_method = 'id_checked'
+          WHERE shop = ?1 AND code = ?2 AND left_at IS NULL`
+      ).bind(shop, str(seg[2], 12).toUpperCase(), nowIso(), staffId).run();
+      return ok({ verified: true });
     }
     if (seg[1] === 'members' && seg[2] === 'list' && method === 'GET') {
       return M.list(env, shop, url.searchParams, rule);
@@ -227,7 +265,27 @@ async function handleApi(request, env, ctx, url, shop) {
        business and a public config that leaks it is a public config that
        lets anybody post fake members into the shop's list. */
     const { endpoint, ...publicRule } = rule;
-    return ok({ rewards: publicRule, pricing, rev: ruleRev });
+    /* The ladder travels with the rule, because a card that cannot name the
+       next rung cannot show somebody what they are working toward. Labels are
+       dollar amounts; the tier's internal name is the owner's, for her
+       reports, and never reaches a customer's screen. */
+    let tiers = { results: [] };
+    try {
+      tiers = await env.DB.prepare(
+        `SELECT id, points_cost, discount_cents, min_subtotal_cents
+           FROM reward_tiers WHERE shop = ?1 AND active = 1
+          ORDER BY sort_order, points_cost`
+      ).bind(shop).all();
+    } catch (e) { /* no ladder on this shop yet */ }
+    return ok({
+      rewards: publicRule, pricing, rev: ruleRev,
+      points: { perDollar: (pricing && pricing.pointsPerDollar) || 10 },
+      tiers: (tiers.results || []).map(t => ({
+        id: t.id, points: t.points_cost,
+        label: '$' + (t.discount_cents / 100).toFixed(2).replace(/\.00$/, '') + ' off',
+        discountCents: t.discount_cents, minSubtotalCents: t.min_subtotal_cents
+      }))
+    });
   }
 
   /* The external loyalty provider, answered honestly. `Loyalty` in the app is
@@ -273,7 +331,23 @@ async function handleApi(request, env, ctx, url, shop) {
   }
   if (path === '/members/me' && method === 'GET') {
     const { rule } = await shopState(env, shop);
-    return M.readMe(env, shop, url.searchParams.get('token'), rule);
+    const res = await M.readMe(env, shop, url.searchParams.get('token'), rule);
+    if (res.status !== 200) return res;
+    /* The points standing rides alongside the visit progress rather than
+       replacing it, so a build of the app that predates the ladder keeps
+       working while one that knows about points reads the balance. */
+    const body = await res.json();
+    /* THE WHOLE ENRICHMENT IS OPTIONAL. A database that has not had the
+       points migration run on it has no reward_tiers and no age_verified_at,
+       and this endpoint still has a job to do. Additive means additive: it
+       must never be able to break the answer it is decorating. */
+    try {
+      const m = await env.DB
+        .prepare('SELECT id FROM members WHERE shop = ?1 AND token = ?2')
+        .bind(shop, str(url.searchParams.get('token'), 60)).first();
+      if (m) body.points = await Points.standing(env, shop, m.id);
+    } catch (e) { /* no points programme here yet */ }
+    return ok(body);
   }
   if (path === '/members/me/leave' && method === 'POST') {
     return M.leave(env, shop, body.token);

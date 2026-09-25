@@ -37,11 +37,26 @@ import { codeVariants, memberToken, codeFor } from './ids.js';
    --------------------------------------------------------------------- */
 export async function progressFor(env, shop, memberId, rule) {
   const need = Math.max(1, rule.visitsFor | 0);
-  const v = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM visits WHERE member_id = ?1').bind(memberId).first();
-  const r = await env.DB
-    .prepare('SELECT COALESCE(SUM(cost), 0) AS spent, COUNT(*) AS n FROM redemptions WHERE member_id = ?1')
-    .bind(memberId).first();
+
+  /* A shop that has moved to the points programme has no `visits` table any
+     more — migration 001 renamed it to visits_v1, because the visits somebody
+     paid for are history worth keeping and not history worth querying.
+     Visit progress is then zero, which is the honest answer: the visit
+     programme is not running. The points standing is carried alongside this
+     by the endpoints, so nothing a customer sees goes missing.
+
+     Wrapped rather than switched on a flag, because the two programmes have
+     to coexist while shops migrate one at a time. */
+  let v = null, r = null;
+  try {
+    v = await env.DB
+      .prepare('SELECT COUNT(*) AS n FROM visits WHERE member_id = ?1').bind(memberId).first();
+    r = await env.DB
+      .prepare('SELECT COALESCE(SUM(cost), 0) AS spent, COUNT(*) AS n FROM redemptions WHERE member_id = ?1')
+      .bind(memberId).first();
+  } catch (e) {
+    return { visits: 0, need, ready: 0, total: 0, redeemed: 0, programme: 'points' };
+  }
 
   const total = v ? v.n : 0;
   /* Spend what was actually spent, at the price it was spent at. Not
@@ -213,12 +228,18 @@ export async function readMe(env, shop, token, rule) {
      hanging around on a phone forever. */
   if (!m || m.left_at) return fail(404, 'no member', 'This device is not holding a membership.');
 
-  const visits = await env.DB
-    .prepare('SELECT at FROM visits WHERE member_id = ?1 ORDER BY at DESC LIMIT 60')
-    .bind(m.id).all();
-  const reds = await env.DB
-    .prepare('SELECT at, reward, cost FROM redemptions WHERE member_id = ?1 ORDER BY at DESC LIMIT 60')
-    .bind(m.id).all();
+  /* The visit history, where there is one. A shop on the points programme has
+     no visits table — migration 001 renamed it — and the points standing the
+     endpoint attaches is what the card reads instead. */
+  let visits = { results: [] }, reds = { results: [] };
+  try {
+    visits = await env.DB
+      .prepare('SELECT at FROM visits WHERE member_id = ?1 ORDER BY at DESC LIMIT 60')
+      .bind(m.id).all();
+    reds = await env.DB
+      .prepare('SELECT at, reward, cost FROM redemptions WHERE member_id = ?1 ORDER BY at DESC LIMIT 60')
+      .bind(m.id).all();
+  } catch (e) { /* points shop */ }
 
   return ok({
     member: cardOf(m),
@@ -287,6 +308,15 @@ export async function addVisit(env, shop, code, sessionId, rule, opts = {}) {
     .bind(shop, str(code, 12).toUpperCase()).first();
   if (!m || m.left_at) return fail(404, 'no member', 'No member with that code.');
 
+  /* A shop that has moved to points has no visits to add. Refusing clearly
+     beats a 500, because an old build of the counter app still calls this and
+     the person holding it deserves to know why. */
+  try { await env.DB.prepare('SELECT 1 FROM visits LIMIT 1').first(); }
+  catch (e) {
+    return fail(409, 'points programme',
+      'This shop credits points on the sale total now. Ring the sale instead of adding a visit.');
+  }
+
   if (!opts.force) {
     const last = await env.DB
       .prepare('SELECT at FROM visits WHERE member_id = ?1 ORDER BY at DESC LIMIT 1')
@@ -313,6 +343,14 @@ export async function redeem(env, shop, code, sessionId, rule) {
   const m = await env.DB.prepare('SELECT * FROM members WHERE shop = ?1 AND code = ?2')
     .bind(shop, str(code, 12).toUpperCase()).first();
   if (!m || m.left_at) return fail(404, 'no member', 'No member with that code.');
+
+  /* Same as addVisit: on a points shop a reward comes off a sale, through
+     checkout, and there is no standalone redeem by design. */
+  try { await env.DB.prepare('SELECT 1 FROM visits LIMIT 1').first(); }
+  catch (e) {
+    return fail(409, 'points programme',
+      'A reward comes off a sale now. Ring the sale and attach the reward to it.');
+  }
 
   const before = await progressFor(env, shop, m.id, rule);
   if (before.ready < 1) {
@@ -351,7 +389,11 @@ const csvCell = v => {
 };
 
 export async function exportCsv(env, shop, rule) {
-  const rows = await env.DB.prepare(
+  /* Same reason as progressFor: a migrated shop has no visits table. The
+     member list is still the member list and the shop still owns it. */
+  let rows;
+  try {
+    rows = await env.DB.prepare(
     `SELECT m.code, m.first, m.phone, m.email, m.birthday, m.sms, m.email_ok,
             m.contact_terms, m.joined, m.left_at,
             (SELECT COUNT(*) FROM visits v WHERE v.member_id = m.id)            AS visits,
@@ -359,7 +401,15 @@ export async function exportCsv(env, shop, rule) {
             (SELECT COUNT(*)  FROM redemptions r WHERE r.member_id = m.id)      AS redemptions,
             (SELECT COALESCE(SUM(cost),0) FROM redemptions r WHERE r.member_id = m.id) AS visits_spent
        FROM members m WHERE m.shop = ?1 ORDER BY m.joined`
-  ).bind(shop).all();
+    ).bind(shop).all();
+  } catch (e) {
+    rows = await env.DB.prepare(
+      `SELECT m.code, m.first, m.phone, m.email, m.birthday, m.sms, m.email_ok,
+              m.contact_terms, m.joined, m.left_at,
+              0 AS visits, NULL AS last_visit, 0 AS redemptions, 0 AS visits_spent
+         FROM members m WHERE m.shop = ?1 ORDER BY m.joined`
+    ).bind(shop).all();
+  }
 
   const need = Math.max(1, rule.visitsFor | 0);
   /* `consented_to` carries the exact sentence they ticked. A list that says
@@ -415,7 +465,9 @@ export async function list(env, shop, params, rule) {
   const limit = Math.max(1, Math.min(200, parseInt(params.get('limit'), 10) || 60));
   const need = Math.max(1, rule.visitsFor | 0);
 
-  const rows = await env.DB.prepare(
+  let rows;
+  try {
+  rows = await env.DB.prepare(
     `SELECT m.id, m.code, m.first, m.phone, m.email, m.birthday, m.email_ok,
             m.joined, m.left_at,
             (SELECT COUNT(*) FROM visits v WHERE v.member_id = m.id)  AS visits,
@@ -426,6 +478,14 @@ export async function list(env, shop, params, rule) {
                 m.id DESC
        LIMIT ?2`
   ).bind(shop, limit).all();
+  } catch (e) {
+    rows = await env.DB.prepare(
+      `SELECT id, code, first, phone, email, birthday, email_ok, joined, left_at,
+              0 AS visits, NULL AS last_visit, 0 AS spent
+         FROM members WHERE shop = ?1 AND left_at IS NULL
+        ORDER BY joined DESC LIMIT ?2`
+    ).bind(shop, limit).all();
+  }
 
   const members = [];
   for (const r of (rows.results || [])) {
