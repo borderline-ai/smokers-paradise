@@ -445,3 +445,17 @@ export async function list(env, shop, params, rule) {
     .bind(shop).first();
   return ok({ members, total: all ? all.n : members.length });
 }
+
+
+/* Read a member and their progress without any of the answer-shaping the
+   endpoints do. Used either side of a visit so the router can tell whether
+   THAT visit is the one that crossed the threshold — a reward going from
+   0 ready to 1 ready is the message worth sending, and a member sitting on a
+   ready reward for three weeks should hear about it once rather than after
+   every subsequent visit. */
+export async function readForNotify(env, shop, code, rule) {
+  const m = await env.DB.prepare('SELECT * FROM members WHERE shop = ?1 AND code = ?2')
+    .bind(shop, str(code, 12).toUpperCase()).first();
+  if (!m || m.left_at) return null;
+  return { member: m, progress: await progressFor(env, shop, m.id, rule) };
+}

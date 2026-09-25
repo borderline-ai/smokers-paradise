@@ -670,9 +670,13 @@ test('a join reaches the shop CRM without the customer waiting for it', async ()
   assert.equal(seen.length, 1);
   assert.match(seen[0].u, /abc123/);
   /* The flat shape a GoHighLevel inbound webhook was set up for. */
+  /* The original flat shape a GoHighLevel inbound webhook was built for, plus
+     `type` and `at`. Added keys, never replacements — an automation somebody
+     already wired against the old shape keeps working. */
   assert.deepEqual(Object.keys(seen[0].body).sort(),
-    ['birthday', 'code', 'email', 'emailOk', 'first', 'joined', 'phone',
-     'shop', 'sms', 'terms']);
+    ['at', 'birthday', 'code', 'email', 'emailOk', 'first', 'joined', 'phone',
+     'shop', 'sms', 'terms', 'type']);
+  assert.equal(seen[0].body.type, 'member.joined');
   assert.equal(seen[0].body.email, 'ana@example.com');
   assert.equal(seen[0].body.emailOk, true);
   /* The shop is not doing SMS. A CRM that receives sms:true will eventually

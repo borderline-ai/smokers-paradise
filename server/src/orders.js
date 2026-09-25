@@ -275,3 +275,23 @@ export async function setStatus(env, shop, code, status) {
     .bind(shop, c, s, nowIso()).run();
   return ok({ code: c, status: s });
 }
+
+
+/* What an order-ready message needs, and nothing more. The email comes from
+   the member the order was linked to at checkout — an order placed by somebody
+   who is not in the programme has nowhere to send to, and says so by answering
+   an empty email rather than by inventing one. */
+export async function readForNotify(env, shop, code) {
+  const row = await env.DB.prepare(
+    `SELECT o.code, o.n, o.who, o.total, o.pickup, m.email, m.first
+       FROM orders o LEFT JOIN members m ON m.id = o.member_id
+      WHERE o.shop = ?1 AND o.code = ?2`
+  ).bind(shop, str(code, 12).toUpperCase()).first();
+  if (!row) return null;
+  return {
+    code: row.code, n: row.n,
+    who: row.first || row.who,
+    email: (row.email || '').toLowerCase(),
+    total: row.total, pickup: row.pickup
+  };
+}

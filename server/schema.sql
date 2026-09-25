@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS members (
   contact_terms TEXT NOT NULL DEFAULT '',
   token     TEXT    NOT NULL,
   joined    TEXT    NOT NULL,
+  /* The year the birthday message last went out. The scheduled handler runs
+     every ten minutes; without this a member would get one hundred and forty
+     four birthday emails on the day and never open one again. */
+  birthday_sent TEXT,
   left_at   TEXT,
   UNIQUE (shop, phone),
   UNIQUE (shop, code)

@@ -28,6 +28,7 @@ import * as C from './catalog.js';
 import * as Sub from './subscribers.js';
 import * as Media from './media.js';
 import * as Out from './outbound.js';
+import { notify, EVENTS, memberFields, birthdaySweep } from './notify.js';
 
 const API = '/api';
 
@@ -137,7 +138,17 @@ async function handleApi(request, env, ctx, url, shop) {
     /* the register board */
     if (seg[1] === 'orders' && seg.length === 2 && method === 'GET') return O.board(env, shop);
     if (seg[1] === 'orders' && seg[3] === 'status' && method === 'POST') {
-      return O.setStatus(env, shop, seg[2], body.status);
+      const res = await O.setStatus(env, shop, seg[2], body.status);
+      if (res.status === 200 && str(body.status, 20) === 'ready') {
+        const who = await O.readForNotify(env, shop, seg[2]);
+        /* Only when there is somewhere to send it. An order placed without an
+           address is collected the way it always was: the customer's own
+           screen follows the counter. */
+        if (who && who.email) {
+          notify(env, ctx, shop, rule, EVENTS.ORDER_READY, who);
+        }
+      }
+      return res;
     }
 
     /* the rewards counter */
@@ -154,7 +165,23 @@ async function handleApi(request, env, ctx, url, shop) {
       return Sub.exportCsv(env, shop);
     }
     if (seg[1] === 'members' && seg[3] === 'visit' && method === 'POST') {
-      return M.addVisit(env, shop, seg[2], sid, rule, { force: !!body.force });
+      const before = await M.readForNotify(env, shop, seg[2], rule);
+      const res = await M.addVisit(env, shop, seg[2], sid, rule, { force: !!body.force });
+      /* The message worth sending. Raised only on the visit that CROSSES the
+         threshold, not on every visit after it — somebody sitting on a ready
+         reward for three weeks should hear about it once, not weekly. */
+      if (res.status === 200) {
+        const after = await M.readForNotify(env, shop, seg[2], rule);
+        if (after && before && after.progress.ready > before.progress.ready && after.member.email) {
+          notify(env, ctx, shop, rule, EVENTS.REWARD_READY,
+            Object.assign(memberFields(after.member), {
+              reward: str(rule.reward, 80),
+              ready: after.progress.ready,
+              visits: after.progress.total
+            }));
+        }
+      }
+      return res;
     }
     if (seg[1] === 'members' && seg[3] === 'redeem' && method === 'POST') {
       return M.redeem(env, shop, seg[2], sid, rule);
@@ -226,21 +253,21 @@ async function handleApi(request, env, ctx, url, shop) {
     const res = await M.join(env, shop, body, rule);
     /* Forward the join to the shop's CRM if they have one, without making the
        customer wait for somebody else's webhook to answer. */
-    if (res.status === 200 && rule.endpoint) {
+    if (res.status === 200) {
       /* The flat shape a GoHighLevel inbound webhook was set up for, plus the
          address and what was consented to. `sms` is kept and kept false-able:
          the shop is not doing SMS, and a CRM that receives sms:true will
-         eventually act on it. */
-      const payload = {
+         eventually act on it.
+
+         `type` is an added key, never a replacement — an automation somebody
+         already built against the original shape keeps working. */
+      notify(env, ctx, shop, rule, EVENTS.MEMBER_JOINED, {
         first: str(body.first, 60), phone: str(body.phone, 20).replace(/\D/g, ''),
         email: str(body.email, 160).toLowerCase(),
         birthday: str(body.birthday, 8),
         sms: !!body.sms, emailOk: !!body.emailOk, terms: str(body.terms, 400),
-        code: str(body.code, 12), joined: str(body.joined, 40) || nowIso(), shop
-      };
-      ctx.waitUntil(
-        Out.enqueue(env, shop, rule.endpoint, payload).then(() => Out.drain(env, 5))
-      );
+        code: str(body.code, 12), joined: str(body.joined, 40) || nowIso()
+      });
     }
     return res;
   }
@@ -257,14 +284,12 @@ async function handleApi(request, env, ctx, url, shop) {
     const res = await Sub.subscribe(env, shop, body);
     if (res.status === 200) {
       const { rule } = await shopState(env, shop);
-      if (rule.endpoint) {
-        ctx.waitUntil(Out.enqueue(env, shop, rule.endpoint, {
-          email: str(body.email, 160).toLowerCase(),
-          source: str(body.source, 40) || 'deal-alerts',
-          terms: str(body.terms, 400),
-          joined: nowIso(), shop
-        }).then(() => Out.drain(env, 5)));
-      }
+      notify(env, ctx, shop, rule, EVENTS.SUBSCRIBED, {
+        email: str(body.email, 160).toLowerCase(),
+        source: str(body.source, 40) || 'deal-alerts',
+        terms: str(body.terms, 400),
+        joined: nowIso()
+      });
     }
     return res;
   }
@@ -372,6 +397,15 @@ export default {
   /* The CRM queue, drained on a timer as well as opportunistically, so a
      webhook that was down when somebody joined still gets them. */
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(Out.drain(env, 50));
+    const shop = env.SHOP || 'smokers-paradise';
+    ctx.waitUntil((async () => {
+      await Out.drain(env, 50);
+      try {
+        const { rule } = await shopState(env, shop);
+        await birthdaySweep(env, shop, rule);
+      } catch (e) {
+        console.error('birthday sweep', e && e.stack || e);
+      }
+    })());
   }
 };
