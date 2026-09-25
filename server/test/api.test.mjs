@@ -546,12 +546,53 @@ test('the wrong PIN is refused and the right one is not', async () => {
 
 test('a four digit PIN on a public address cannot be walked through', async () => {
   const { ipad } = fresh();
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 9; i++) {
     await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '000' + i } });
   }
   const locked = await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '7413' } });
   assert.equal(locked.status, 429, 'even the right PIN waits');
   assert.equal(locked.body.reason, 'locked');
+  /* The wait is stated. "Try again later" is a dead end; "try again in 45
+     seconds" is something somebody at a counter can make a decision about. */
+  assert.match(locked.body.detail, /Try again in \d+ seconds|Try again in a minute|Try again in \d+ minutes/);
+});
+
+test('the first few fumbles cost nothing at all', async () => {
+  /* The person who actually trips a PIN guard is a staff member with cold
+     hands during a rush, not an attacker. Four slips are free; a flat lockout
+     on the eighth punished the wrong person. */
+  const { ipad } = fresh();
+  for (let i = 0; i < 3; i++) {
+    const r = await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '000' + i } });
+    assert.equal(r.status, 401, 'fumble ' + (i + 1) + ' should be a plain refusal');
+    assert.equal(r.body.reason, 'bad pin');
+  }
+  const good = await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '7413' } });
+  assert.equal(good.status, 200, 'and the right PIN still works straight after');
+});
+
+test('it warns before the waiting starts', async () => {
+  const { ipad } = fresh();
+  let warned = false;
+  for (let i = 0; i < 4; i++) {
+    const r = await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '000' + i } });
+    if (/means waiting/.test(r.body.detail || '')) warned = true;
+  }
+  assert.ok(warned, 'the last free fumble should say the next one costs time');
+});
+
+test('knowing the PIN clears the record of fumbling', async () => {
+  /* Whoever got in knew the PIN, so the run of wrong ones was fumbling rather
+     than an attack. The next mistake starts from zero. */
+  const { ipad } = fresh();
+  for (let i = 0; i < 3; i++) {
+    await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '000' + i } });
+  }
+  assert.equal((await ipad.call('/api/staff/session', { method: 'POST', body: { pin: '7413' } })).status, 200);
+
+  const after = await ipad.env.DB
+    .prepare('SELECT COUNT(*) AS n FROM pin_attempts').first();
+  assert.equal(after.n, 0, 'the failures are gone');
 });
 
 test('the session cookie cannot be read by a script or sent from another site', async () => {
