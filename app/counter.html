@@ -77,8 +77,9 @@ header{position:sticky;top:0;z-index:20;background:rgba(8,6,15,.94);
 .dot{width:7px;height:7px;border-radius:50%;background:var(--go);flex:none}
 .dot.off{background:var(--bad)}
 .htop .sp{flex:1}
-.htop button{color:var(--muted);font-size:13px;padding:6px 10px;border-radius:9px;
-  border:1px solid var(--hair)}
+.htop button,.htop a{color:var(--muted);font-size:13px;padding:6px 10px;border-radius:9px;
+  border:1px solid var(--hair);text-decoration:none;display:inline-block}
+.htop a#peek{color:var(--go-ink);border-color:rgba(31,203,139,.4)}
 nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:9px}
 nav::-webkit-scrollbar{display:none}
 nav button{white-space:nowrap;padding:8px 14px;border-radius:999px;font-size:13.5px;
@@ -230,6 +231,15 @@ input:focus{border-color:var(--hot)}
       <span class="dot" id="live"></span>
       <b>Register</b>
       <span class="sp"></span>
+      <!-- The customer's view, one tap away. Somebody editing a price should
+           be able to see what a shopper sees without typing a URL. It opens in
+           its own tab so the register stays where it was: a counter screen
+           that navigates away during a rush has lost the order board.
+
+           An HTML comment, not a ${/* JS one */''}: this header is static
+           markup, not a template literal, so a ${} here renders as text on the
+           screen. It did, in front of somebody. -->
+      <a id="peek" href="/" target="_blank" rel="noopener">Preview</a>
       <button id="out">Sign out</button>
     </div>
     <nav id="tabs"></nav>
@@ -798,6 +808,8 @@ async function drawMenu(){
     <div class="card">
       <div class="row" style="margin-bottom:10px">
         <button class="btn" data-new="1">+ Add a product</button>
+        <a class="btn ghost" href="/" target="_blank" rel="noopener"
+           style="text-decoration:none;line-height:1.4">See the menu</a>
       </div>
       <input id="mq" type="search" value="${esc(MQ)}" placeholder="Find a product">
       <div class="note">${r.body.total} on the shelf

@@ -156,8 +156,13 @@ export async function seed(env, shop, body) {
   for (const it of items) {
     const id = str(it && it.id, 60);
     if (!id) { skipped++; continue; }
+    /* The photograph rides along with the seed. Without it the editor shows
+       four hundred products all captioned "no photo", which reads as a broken
+       catalogue rather than a seeded one. `photo` is a path since stage 172,
+       so this is a short string, not an image. */
     const c = cleanPatch({
       name: it.name, brand: it.brand, cat: it.cat,
+      photo: it.photo || undefined,
       price: typeof it.price === 'number' ? it.price : 0
     });
     if (!c || c.error) { skipped++; continue; }
