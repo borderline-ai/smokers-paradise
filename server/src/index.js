@@ -28,6 +28,7 @@ import * as C from './catalog.js';
 import * as Sub from './subscribers.js';
 import * as Media from './media.js';
 import * as Points from './loyalty.js';
+import * as Tiers from './tiers.js';
 import { counterStaffId } from './loyalty.js';
 import * as Out from './outbound.js';
 import { notify, EVENTS, memberFields, birthdaySweep } from './notify.js';
@@ -174,6 +175,19 @@ async function handleApi(request, env, ctx, url, shop) {
     /* THE ONE CALL THE COUNTER MAKES. Rings the sale, credits points on what
        is actually tendered, and optionally spends a tier against that same
        sale. One call, one idempotency key, one confirm at the till. */
+    if (seg[1] === 'tiers' && seg.length === 2 && method === 'GET') {
+      return Tiers.list(env, shop);
+    }
+    if (seg[1] === 'tiers' && seg.length === 2 && method === 'POST') {
+      const staffId = await counterStaffId(env, shop);
+      const pc = await readConfig(env, shop, 'points', { points_per_dollar: 10 });
+      return Tiers.save(env, shop, body, staffId, pc.value.points_per_dollar);
+    }
+    if (seg[1] === 'tiers' && seg[3] === 'active' && method === 'POST') {
+      const staffId = await counterStaffId(env, shop);
+      return Tiers.setActive(env, shop, seg[2], !!body.active, staffId);
+    }
+
     if (seg[1] === 'checkout' && method === 'POST') {
       const staffId = await counterStaffId(env, shop);
       const pricing2 = await readConfig(env, shop, 'points', {

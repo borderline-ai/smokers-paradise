@@ -473,7 +473,11 @@ function render(){
   if(TAB === 'rewards') return v.innerHTML = viewRewards(), wireRewards();
   if(TAB === 'menu')    return drawMenu();
   if(TAB === 'people')  return drawPeople();
-  if(TAB === 'rule')    return v.innerHTML = viewRule(), wireRule();
+  if(TAB === 'rule'){
+    v.innerHTML = viewRule(); wireRule(); wireTiers();
+    if(!TIERS) pullTiers().then(()=>{ if(TAB==='rule') render() });
+    return;
+  }
 }
 
 /* ---- orders ---- */
@@ -817,6 +821,49 @@ async function drawMenu(){
     q._t = setTimeout(drawMenu, 280) };
 }
 
+/* =====================================================================
+   SHRINK IT BEFORE IT LEAVES THE PHONE.
+
+   A staff member shoots a product on an iPhone and that is three megabytes.
+   Stored as it comes, that photo sits on a product card that renders three
+   hundred pixels wide, and a customer loading the shelf on bad signal in the
+   shop pulls megabytes for pictures nobody can see the detail of.
+
+   The storage bill is not the reason. R2 is a cent and a half per gigabyte and
+   even a shop uploading recklessly costs a dollar a month. The reason is that
+   the app gets slow, which is a worse outcome than any amount of storage.
+
+   Longest edge 1200, WebP at 82%. A three megabyte camera photo lands around
+   eighty kilobytes and looks identical at the size it is actually shown.
+
+   IT NEVER FAILS CLOSED. A browser with no canvas, an image it cannot decode,
+   a result somehow larger than the original: the original goes up instead.
+   A photo that uploads big beats a photo that does not upload.
+   ===================================================================== */
+const SHRINK_EDGE = 1200;
+const SHRINK_QUALITY = 0.82;
+
+async function shrink(file){
+  try{
+    if(!/^image\//.test(file.type) || /svg/.test(file.type)) return file;
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, SHRINK_EDGE / Math.max(bmp.width, bmp.height));
+    /* Already small enough and already efficient: leave it alone. */
+    if(scale === 1 && file.size < 300 * 1024) return file;
+
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if(bmp.close) bmp.close();
+
+    const blob = await new Promise(res => c.toBlob(res, 'image/webp', SHRINK_QUALITY));
+    if(!blob || blob.size >= file.size) return file;
+    return blob;
+  }catch(e){ return file }
+}
+
 function editSheet(p){
   const isNew = !p;
   p = p || {id:'', name:'', brand:'', price:'', cat:'', photo:'', hidden:false};
@@ -851,11 +898,13 @@ function editSheet(p){
 
   $('#eFile').onchange = async ev => {
     const f = ev.target.files && ev.target.files[0]; if(!f) return;
+    $('#ePhotoName').textContent = 'Shrinking…';
+    const small = await shrink(f);
     $('#ePhotoName').textContent = 'Uploading…';
     const r = await fetch(API + '/staff/media', {
       method:'POST', credentials:'same-origin',
-      headers:{'content-type': f.type || 'application/octet-stream'},
-      body: f
+      headers:{'content-type': small.type || 'application/octet-stream'},
+      body: small
     }).then(async res => {
       const ct = (res.headers.get('content-type')||'').toLowerCase();
       if(ct.indexOf('json') < 0) return null;
@@ -931,12 +980,12 @@ function viewRule(){
         screen changes with it on their next open. Nothing here is fixed.</p>
       <label class="f"><span>Programme name</span>
         <input id="sName" value="${esc(R.name||'')}"></label>
-      <div class="row">
-        <label class="f"><span>Visits to earn a reward</span>
-          <input id="sN" inputmode="numeric" maxlength="3" value="${esc(R.visitsFor||'')}"></label>
-        <label class="f"><span>What they get</span>
-          <input id="sGift" value="${esc(R.reward||'')}"></label>
-      </div>
+      <label class="f"><span>Points earned per $1 spent</span>
+        <input id="sRate" inputmode="numeric" maxlength="3"
+          value="${esc((CONFIG&&CONFIG.points&&CONFIG.points.perDollar)||10)}" disabled></label>
+      <p class="note" style="margin:-6px 0 12px">Changing the earn rate re-prices
+        every reward on the ladder at once, so it is deliberately not a field you
+        can nudge during a rush. Ask BorderLine to move it.</p>
       <label class="f"><span>Birthday line</span>
         <input id="sPerk" value="${esc(R.perk||'')}"></label>
       <label class="f"><span>Where new members are sent</span>
@@ -950,6 +999,7 @@ function viewRule(){
       <button class="btn ghost" id="sOff" style="margin-top:8px">${
         R.on ? 'Switch the programme off' : 'Switch the programme on'}</button>
     </div>
+    ${tierEditor()}
     <div class="card">
       <div class="eyebrow">This register</div>
       <p class="note" style="margin:0">Signed in on this device for the trading day.
@@ -958,13 +1008,143 @@ function viewRule(){
     </div>`;
 }
 
+/* ---- the ladder ----
+   Every number in the programme is the shop's. The six it ships with were
+   chosen for this shop, not chosen by the code, and the owner should be able
+   to move one from the counter rather than asking somebody to run a database
+   command. */
+let TIERS = null, TIEREDIT = null;
+
+function pctBack(points, cents){
+  const per = (CONFIG && CONFIG.points && CONFIG.points.perDollar) || 10;
+  const spend = (points / per) * 100;
+  return spend > 0 ? (cents / spend * 100) : 0;
+}
+
+function tierEditor(){
+  if(!TIERS) return `<div class="card"><div class="eyebrow">The rewards</div>
+    <p class="note" style="margin:0">Loading the ladder…</p></div>`;
+
+  const e = TIEREDIT;
+  return `<div class="card">
+    <div class="eyebrow">The rewards</div>
+    <p class="note" style="margin:0 0 12px">What a customer can spend points on.
+      Change any of it and every phone picks it up on its next open.</p>
+
+    ${TIERS.map(t => {
+      const back = pctBack(t.points_cost, t.discount_cents);
+      return `<div class="tier ${t.active?'':'off'}" style="cursor:default">
+        <b>${money2(t.discount_cents)} off
+          <small>${t.points_cost.toLocaleString()} points
+            &middot; ${back.toFixed(1)}% back${
+            t.min_subtotal_cents ? ' &middot; baskets over '+money2(t.min_subtotal_cents) : ''}${
+            t.active ? '' : ' &middot; retired'}</small></b>
+        <button class="mini" data-tedit="${t.id}">Edit</button>
+      </div>`;
+    }).join('')}
+
+    <button class="btn ghost" data-tedit="new" style="margin-top:8px">+ Add a reward</button>
+
+    ${e ? `<div class="hit" style="margin-top:14px">
+      <div class="eyebrow">${e.id ? 'Edit this reward' : 'A new reward'}</div>
+      <div class="row">
+        <label class="f"><span>Points it costs</span>
+          <input id="tPts" inputmode="numeric" value="${esc(e.points_cost||'')}"></label>
+        <label class="f"><span>Dollars off</span>
+          <input id="tOff" inputmode="decimal" value="${e.discount_cents?(e.discount_cents/100).toFixed(2):''}"></label>
+      </div>
+      <label class="f"><span>Smallest basket it works on (optional)</span>
+        <input id="tMin" inputmode="decimal" placeholder="no minimum"
+          value="${e.min_subtotal_cents?(e.min_subtotal_cents/100).toFixed(2):''}"></label>
+      <div id="tBack" class="note" style="margin:-4px 0 10px"></div>
+      <div id="tMsg"></div>
+      <button class="btn" id="tSave">${e.id?'Save it':'Add it'}</button>
+      ${e.id ? `<button class="btn ghost" id="tRetire" style="margin-top:8px">${
+        e.active ? 'Take it off the ladder' : 'Put it back on the ladder'}</button>` : ''}
+      <button class="btn ghost" id="tCancel" style="margin-top:8px">Cancel</button>
+    </div>` : ''}
+  </div>`;
+}
+
+async function pullTiers(){
+  const r = await api('/staff/tiers');
+  if(r && r.ok) TIERS = r.body.tiers;
+}
+
+function wireTiers(){
+  document.querySelectorAll('[data-tedit]').forEach(b => b.onclick = () => {
+    const v = b.dataset.tedit;
+    TIEREDIT = v === 'new' ? {points_cost:'', discount_cents:'', active:1}
+                           : Object.assign({}, TIERS.find(t => String(t.id) === v));
+    render();
+  });
+
+  const c = $('#tCancel');
+  if(c) c.onclick = () => { TIEREDIT = null; render() };
+
+  /* The percentage back, live, while she types. A tier is points in and
+     dollars out, and this is the only number that says whether it is a good
+     idea. Without it somebody sets 2,000 points for $25 off and finds out at
+     the end of the month. */
+  const show = () => {
+    const el = $('#tBack'); if(!el) return;
+    const p = parseInt(($('#tPts')||{}).value, 10);
+    const d = Math.round(Number((($('#tOff')||{}).value||'').replace(/[^0-9.]/g,'')) * 100);
+    if(!(p > 0) || !(d > 0)){ el.textContent = ''; return }
+    const back = pctBack(p, d);
+    el.innerHTML = '<b style="color:' + (back > 8 ? 'var(--warn)' : 'var(--go-ink)') + '">' +
+      back.toFixed(1) + '% back</b> &middot; they spend ' + money2(Math.round(p/((CONFIG&&CONFIG.points&&CONFIG.points.perDollar)||10)*100)) +
+      ' to earn it';
+  };
+  ['tPts','tOff'].forEach(id => { const el = $('#'+id); if(el) el.oninput = show });
+  show();
+
+  const sv = $('#tSave');
+  if(sv) sv.onclick = async () => {
+    const cents = v => Math.round(Number(String(v||'').replace(/[^0-9.]/g,'')) * 100);
+    const body = {
+      id: TIEREDIT.id,
+      points_cost: ($('#tPts')||{}).value,
+      discount_cents: cents(($('#tOff')||{}).value),
+      min_subtotal_cents: (($('#tMin')||{}).value||'').trim() ? cents(($('#tMin')||{}).value) : null
+    };
+    sv.disabled = true;
+    let r = await api('/staff/tiers', {method:'POST', body: JSON.stringify(body)});
+    /* Over 20% back is a warning, not a rule. She confirms and it saves. */
+    if(r && !r.ok && /Send it again with confirm/.test(why(r,''))){
+      if(confirm(why(r,'') + '\n\nSave it anyway?')){
+        r = await api('/staff/tiers', {method:'POST',
+          body: JSON.stringify(Object.assign({confirmed:true}, body))});
+      } else { sv.disabled = false; return }
+    }
+    if(r && r.ok){
+      TIEREDIT = null; await pullTiers(); await pullRule(); render();
+      toast('Saved. Every phone picks it up on its next open.');
+      return;
+    }
+    sv.disabled = false;
+    $('#tMsg').innerHTML = `<div class="warn">${esc(why(r,'That was not saved.'))}</div>`;
+  };
+
+  const rt = $('#tRetire');
+  if(rt) rt.onclick = async () => {
+    const r = await api('/staff/tiers/' + TIEREDIT.id + '/active',
+      {method:'POST', body: JSON.stringify({active: TIEREDIT.active ? false : true})});
+    if(r && r.ok){
+      TIEREDIT = null; await pullTiers(); render();
+      toast('Ladder updated.');
+      return;
+    }
+    $('#tMsg').innerHTML = `<div class="warn">${esc(why(r,'That was not changed.'))}</div>`;
+  };
+}
+
 function wireRule(){
   $('#sSave').onclick = async () => {
-    const n = parseInt($('#sN').value, 10);
+    /* visitsFor and reward are gone from this screen: on the points
+       programme they mean nothing, and the ladder is edited below. */
     const rule = {
       name: ($('#sName').value||'').trim(),
-      visitsFor: n,
-      reward: ($('#sGift').value||'').trim(),
       perk: ($('#sPerk').value||'').trim(),
       endpoint: ($('#sEnd').value||'').trim()
     };

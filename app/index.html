@@ -13927,13 +13927,28 @@ function renderAccount(){
       <small style="color:var(--muted);font-size:12px">${S.phone||'No number on file'}</small></div>
     </div>
     <button class="arow" data-edit="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.7"/><path d="M4.6 21c1-4.1 4-6.2 7.4-6.2s6.4 2.1 7.4 6.2"/></svg>
-      <div class="t"><b>Name and phone</b><small>Used for pickup and your ready text</small></div><span class="ch">&rsaquo;</span></button>
+      <div class="t"><b>Name and phone</b><small>So staff can call your name, and ring you about an order</small></div><span class="ch">&rsaquo;</span></button>
     ${(typeof SHOP_REWARDS!=='undefined' && SHOP_REWARDS.on
         && !(typeof Loyalty!=='undefined' && Loyalty.available && Loyalty.state.provider!=='none'))?`
     <button class="arow" data-go="rewards"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>
-      <div class="t"><b>${esc(SHOP_REWARDS.name)}</b><small>${Member.joined
-        ? esc(Member.data.code) + ' &middot; ' + Member.progress().visits + ' of ' + SHOP_REWARDS.visitsFor + ' visits'
-        : 'Every ' + SHOP_REWARDS.visitsFor + ' visits is ' + esc(SHOP_REWARDS.reward)}</small></div>
+      <div class="t"><b>${esc(SHOP_REWARDS.name)}</b><small>${(function(){
+        /* The points programme, where the shop runs one. Asks Member rather
+           than building its own sentence out of visitsFor, which is how this
+           row got left behind when the card was rewritten. */
+        const P = (typeof Member !== 'undefined') ? Member.points : null;
+        if(P){
+          return Member.joined
+            ? esc(Member.data.code) + ' &middot; ' + P.balance.toLocaleString() + ' points' +
+              (P.next ? ' &middot; ' + P.next.short.toLocaleString() + ' to ' + esc(P.next.label) : '')
+            : 'Every $1 earns ' + SP_POINTS_PER_DOLLAR + ' points';
+        }
+        if(SP_TIERS.length && !Member.joined){
+          return 'Every $1 earns ' + SP_POINTS_PER_DOLLAR + ' points';
+        }
+        return Member.joined
+          ? esc(Member.data.code) + ' &middot; ' + Member.progress().visits + ' of ' + SHOP_REWARDS.visitsFor + ' visits'
+          : 'Every ' + SHOP_REWARDS.visitsFor + ' visits is ' + esc(SHOP_REWARDS.reward);
+      })()}</small></div>
       <span class="ch">&rsaquo;</span></button>`:''}
     ${(typeof Loyalty!=='undefined' && Loyalty.available && Loyalty.state.provider!=='none')?`
     <button class="arow" data-go="rewards"><svg viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>

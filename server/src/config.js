@@ -102,6 +102,9 @@ export function cleanRewards(body, current) {
       out.endpoint = u.toString();
     }
   }
+  /* The visit programme's rule, kept for shops still running it. A shop on
+     points edits the ladder in reward_tiers instead, and the counter no longer
+     shows these two fields. */
   if ('visitsFor' in body) {
     const n = parseInt(body.visitsFor, 10);
     if (!(n >= 1 && n <= 100)) {
