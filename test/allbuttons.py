@@ -13,7 +13,7 @@ import os
 import sys
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 OUT = '/tmp/spall'
 os.makedirs(OUT, exist_ok=True)
 

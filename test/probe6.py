@@ -1,6 +1,6 @@
 import asyncio, json
 from playwright.async_api import async_playwright
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 async def m():
     async with async_playwright() as pw:
         br=await pw.chromium.launch(); pg=await br.new_page(viewport={'width':390,'height':844})

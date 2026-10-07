@@ -6,7 +6,7 @@ async def m():
     async with async_playwright() as pw:
         br=await pw.chromium.launch(); pg=await br.new_page()
         await pg.route('**/*', lambda r: r.abort() if not r.request.url.startswith('file:') else r.continue_())
-        await pg.goto('file:///root/work/smokers-paradise-demo/build/index.html'); await pg.wait_for_timeout(1600)
+        await pg.goto('file://' + __import__('sppath').APP); await pg.wait_for_timeout(1600)
         for b,mm,tag in [('Lost Mary','MO20000 Pro','lm2'),('Geek Bar','Pulse X2 50K','gb2'),
                          ('Off-Stamp','SW9000','sw'),('TRE House','Mushroom Chocolate, Peanut Butter','tre1'),
                          ('TRE House','Mushroom Chocolate, Fruity Cereal','tre2')]:

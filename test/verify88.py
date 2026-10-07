@@ -10,7 +10,7 @@ import json
 import re
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 ok = fail = 0
 
 

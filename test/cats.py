@@ -4,7 +4,7 @@ async def m():
     async with async_playwright() as pw:
         br=await pw.chromium.launch(); pg=await br.new_page()
         await pg.route('**/*', lambda r: r.abort() if not r.request.url.startswith('file:') else r.continue_())
-        await pg.goto('file:///root/work/smokers-paradise-demo/build/index.html'); await pg.wait_for_timeout(1600)
+        await pg.goto('file://' + __import__('sppath').APP); await pg.wait_for_timeout(1600)
         r=await pg.evaluate("""()=>{
           const out={cats:[], subs:{}};
           CATS.forEach(c=>out.cats.push([c[0],c[1],PRODUCTS.filter(p=>p.cat===c[0]).length]));

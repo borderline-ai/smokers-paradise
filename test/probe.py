@@ -3,7 +3,7 @@ import asyncio
 import json
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 
 
 async def m():

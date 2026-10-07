@@ -4,7 +4,7 @@
 import asyncio, os, sys
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 os.makedirs('/tmp/spa', exist_ok=True)
 fails, passes = [], []
 
@@ -72,7 +72,8 @@ async def main():
         r = await pg.evaluate("""async () => {
             localStorage.removeItem('sp_member_ask_v1');
             go('rewards'); await new Promise(r=>setTimeout(r,700));
-            mbFirst.value='Marco'; mbPhone.value='5205550134'; mbSms.checked=true;
+            mbFirst.value='Marco'; mbPhone.value='5205550134';
+            mbEmail.value='marco@example.com'; mbSms.checked=true;
             mbGo.click(); await new Promise(r=>setTimeout(r,600));
             for(const v of ['home','deals','account','home']){ go(v); await new Promise(r=>setTimeout(r,700)) }
             return {joined: Member.joined,

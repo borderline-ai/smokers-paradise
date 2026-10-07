@@ -1,0 +1,27 @@
+{
+  "name": "smokers-paradise-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The shop's backend. Members, visits, redemptions, orders, catalogue and the rule — on Cloudflare Workers and D1.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "db:create": "wrangler d1 create smokers-paradise",
+    "db:init": "wrangler d1 execute smokers-paradise --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute smokers-paradise --local --file=./schema.sql",
+    "pin": "wrangler secret put STAFF_PIN",
+    "import": "node scripts/import-catalogue.mjs",
+    "serve": "node scripts/serve.mjs",
+    "members": "wrangler d1 execute smokers-paradise --remote --command \"SELECT code, first, phone, joined FROM members ORDER BY joined DESC LIMIT 50\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260925.1": true
+  }
+}

@@ -6,7 +6,7 @@ import os
 import sys
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 os.makedirs('/tmp/spv', exist_ok=True)
 fails, passes = [], []
 

@@ -11,7 +11,7 @@ over, so it is tested as one continuous run rather than as isolated controls.
 import asyncio, os, sys
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 os.makedirs('/tmp/spj', exist_ok=True)
 fails, passes = [], []
 

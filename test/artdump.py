@@ -1,7 +1,7 @@
 import asyncio, base64, io, os
 from playwright.async_api import async_playwright
 from PIL import Image
-B='/root/work/smokers-paradise-demo/build/index.html'
+B=__import__('sppath').APP
 os.makedirs('/tmp/spart', exist_ok=True)
 async def m():
     async with async_playwright() as pw:

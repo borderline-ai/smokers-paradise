@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "smokers-paradise",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/scripts/serve.mjs", "8787"],
+      "port": 8787
+    }
+  ]
+}

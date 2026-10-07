@@ -24,7 +24,7 @@ import asyncio
 import json
 from playwright.async_api import async_playwright
 
-B = '/root/work/smokers-paradise-demo/build/index.html'
+B = __import__('sppath').APP
 
 PROBE = """() => {
   const SEL = 'button, a[href], [role=button], [data-go], [data-cat], [data-p],'
